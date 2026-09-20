@@ -3,8 +3,8 @@
 EmotionEngine.process(video_frame, audio) -> JSON-serializable dict with
 face/voice/overall/trend/conflict keys as specified in docs/ARCHITECTURE.md.
 
-TASK_MEE_004: Vision path wired to mee.vision.processor (InsightFace/SCRFD +
-emotion head). Voice path remains stubbed (TASK_MEE_003).
+TASK_MEE_004: Vision path wired. TASK_MEE_005: Voice path wired with SpeechBrain RavNet.
+Voice path degrades gracefully when speechbrain unavailable.
 """
 
 from __future__ import annotations
@@ -64,6 +64,7 @@ class EmotionEngine:
         self.config = config or MEEConfig()
         self._initialized = False
         self._vision_processor = None  # TASK_MEE_004: lazy-loaded VisionProcessor
+        self._voice_processor = None   # TASK_MEE_005: lazy-loaded VoiceProcessor
         self._model_ready = False  # Stub: no backend installed yet
 
     def _ensure_vision(self):
@@ -79,6 +80,15 @@ class EmotionEngine:
                 self._vision_processor = None  # graceful degradation
                 return None
         return self._vision_processor
+    def _ensure_voice(self):
+        """TASK_MEE_005: Lazy-load the voice processor (one-time cost)."""
+        if not hasattr(self, '_voice_processor') or self._voice_processor is None:
+            try:
+                from ..voice.processor import VoiceProcessor
+                self._voice_processor = VoiceProcessor()
+            except Exception:
+                self._voice_processor = None  # graceful degradation
+        return self._voice_processor
 
     def process(
         self,
@@ -136,13 +146,23 @@ class EmotionEngine:
         )
 
     def _infer_voice(self, audio=None) -> dict | None:
-        if not self._model_ready or audio is None:
+        """TASK_MEE_005: Real voice inference via VoiceProcessor."""
+        if audio is None:
             return None
-        # Placeholder — will be replaced in TASK_MEE_003
-        return {"emotion": "neutral", "confidence": 0.0, "scores": {}}
+        vp = self._ensure_voice()
+        if vp is None:
+            # Graceful degradation — no voice model available
+            scores = {label: 0.0 for label in ["angry", "disgust", "fear", "happy", "sad", "surprised", "neutral"]}
+            return {"emotion": "neutral", "confidence": 0.0, "scores": scores}
+        result = vp.process(audio, self.config.audio_sample_rate)
+        return {
+            "emotion": result.get("emotion", "neutral"),
+            "confidence": result.get("confidence", 0.0),
+            "scores": result.get("scores", {}),
+        }
 
     def _fuse(self, face: _MEEFaceResult, voice: dict | None) -> dict:
-        """TASK_MEE_004: Fusion — vision now available, voice still stubbed."""
+        """TASK_MEE_005: Fusion — both vision and voice paths available. Voice degrades to neutral when unavailable."""
         if face.has_face and voice:
             # Both present — take higher-confidence prediction
             if face.confidence >= voice["confidence"]:

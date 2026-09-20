@@ -13,7 +13,7 @@ authors = [{name = "Deepsim-AI"}]
 
 [project.optional-dependencies]
 vision = ["opencv-python>=4.8", "onnxruntime>=1.16", "insightface>=0.7", "deepface>=0.0.84"]
-voice = ["sounddevice>=0.4", "librosa>=0.10", "onnxruntime>=1.16"]
+voice = ["speechbrain>=0.5.14", "sounddevice>=0.4", "librosa>=0.10", "onnxruntime>=1.16"]
 demo = ["streamlit>=1.28"]
 dev = ["pytest>=7.4", "pytest-cov>=4.1"]
 
