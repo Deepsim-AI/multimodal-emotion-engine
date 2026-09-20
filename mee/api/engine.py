@@ -3,8 +3,8 @@
 EmotionEngine.process(video_frame, audio) -> JSON-serializable dict with
 face/voice/overall/trend/conflict keys as specified in docs/ARCHITECTURE.md.
 
-This is a working stub: models return None when no model backend is installed.
-A concrete implementation replaces this skeleton once TASK_MEE_001 G2 is approved.
+TASK_MEE_004: Vision path wired to mee.vision.processor (InsightFace/SCRFD +
+emotion head). Voice path remains stubbed (TASK_MEE_003).
 """
 
 from __future__ import annotations
@@ -63,8 +63,22 @@ class EmotionEngine:
     def __init__(self, config: Optional[MEEConfig] = None):
         self.config = config or MEEConfig()
         self._initialized = False
-        # TODO (G3+): load model backends here based on config.vision_model_path etc.
+        self._vision_processor = None  # TASK_MEE_004: lazy-loaded VisionProcessor
         self._model_ready = False  # Stub: no backend installed yet
+
+    def _ensure_vision(self):
+        """TASK_MEE_004: Lazy-load the vision processor (one-time cost)."""
+        if self._vision_processor is None:
+            try:
+                from ..vision.processor import VisionProcessor
+                self._vision_processor = VisionProcessor(
+                    model_path=self.config.vision_model_path,
+                    confidence_threshold=self.config.face_confidence_threshold,
+                )
+            except Exception:
+                self._vision_processor = None  # graceful degradation
+                return None
+        return self._vision_processor
 
     def process(
         self,
@@ -107,10 +121,19 @@ class EmotionEngine:
     # ---- Internal stubs (G3+ replace with real inference) ----
 
     def _infer_vision(self, frame=None) -> _MEEFaceResult:
-        if not self._model_ready or frame is None:
+        """TASK_MEE_004: Real vision inference via VisionProcessor."""
+        if frame is None:
             return _MEEFaceResult()
-        # Placeholder — will be replaced in TASK_MEE_002
-        return _MEEFaceResult(emotion="neutral", confidence=0.0, has_face=False)
+        vp = self._ensure_vision()
+        if vp is None:
+            return _MEEFaceResult()  # graceful: no face, not an error
+        result = vp.process_frame(frame)
+        return _MEEFaceResult(
+            emotion=result.emotion,
+            confidence=result.confidence,
+            scores=result.scores,
+            has_face=result.has_face,
+        )
 
     def _infer_voice(self, audio=None) -> dict | None:
         if not self._model_ready or audio is None:
@@ -119,7 +142,7 @@ class EmotionEngine:
         return {"emotion": "neutral", "confidence": 0.0, "scores": {}}
 
     def _fuse(self, face: _MEEFaceResult, voice: dict | None) -> dict:
-        """V1 fusion: simple equal-weight voting when both available."""
+        """TASK_MEE_004: Fusion — vision now available, voice still stubbed."""
         if face.has_face and voice:
             # Both present — take higher-confidence prediction
             if face.confidence >= voice["confidence"]:
