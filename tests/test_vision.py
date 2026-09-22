@@ -10,6 +10,13 @@ import pytest
 from mee.vision.detector import FaceDetector, Face
 from mee.vision.emotion_model import EmotionModel, EMOTION_LABELS
 from mee.vision.processor import VisionProcessor, VisionResult, FaceEmotion
+from tests.helpers import is_jetson
+
+
+# TASK_MEE_010: skip GPU-specific tests on non-Jetson environments
+requires_jetson = pytest.mark.skipif(
+    not is_jetson(), reason="Jetson GPU hardware required"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -243,3 +250,26 @@ def test_processor_multiple_faces():
     for f in result.faces:
         assert f.label in EMOTION_LABELS
         assert f.confidence > 0
+
+
+# ---------------------------------------------------------------------------
+# TASK_MEE_010: Jetson GPU-specific tests
+# ---------------------------------------------------------------------------
+
+@requires_jetson
+def test_jetson_gpu_available():
+    """Verify the Jetson GPU is visible to the runtime."""
+    import torch
+    assert torch.cuda.is_available(), "CUDA device not available on Jetson"
+
+@requires_jetson
+def test_jetson_vision_inference_runs():
+    """Run a real vision inference cycle on Jetson GPU (no crash, valid output)."""
+    from mee.vision.processor import VisionProcessor
+    vp = VisionProcessor()
+    frame = _make_frame()
+    result = vp.process_frame(frame)
+    assert result is not None
+    # Output must be structurally valid regardless of face detection result
+    assert hasattr(result, "emotion")
+    assert hasattr(result, "has_face")

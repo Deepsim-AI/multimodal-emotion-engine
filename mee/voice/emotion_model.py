@@ -120,10 +120,36 @@ class EmotionModel:
                 return False
 
     def _ensure_loaded(self) -> None:
-        """Load the emotion model on first call (lazy init)."""
+        """Load the emotion model on first call (lazy init).
+
+        TASK_MEE_010: Added TensorRT engine auto-detection — if a `.trt` or
+        `.int8.onnx` file exists alongside the model directory, it is loaded
+        via ONNX Runtime with TensorRT/CUDA providers before falling back to
+        PyTorch backends.
+        """
         if self._initialized:
             return
         self._initialized = True
+
+        # TASK_MEE_010: Try TensorRT / ONNX Runtime engine first (Jetson GPU path)
+        if self._model is None:
+            trt_path = self._find_tensorrt_engine()
+            if trt_path is not None:
+                try:
+                    import onnxruntime as ort
+                    providers = [p for p in [
+                        "TensorrtExecutionProvider",
+                        "CUDAExecutionProvider",
+                        "CPUExecutionProvider",
+                    ] if p in ort.get_available_providers()]
+                    self._model = ort.InferenceSession(
+                        str(trt_path), providers=providers
+                    )
+                    self._backend = "tensorrt"
+                    self._onnx_labels = ["neutral", "angry", "happy", "sad"]
+                    return
+                except Exception as e:
+                    print(f"[MEE-Voice] TensorRT engine load failed, falling back: {e}")
 
         # Try SpeechBrain first (primary per MEE_003 CTO_APPROVAL)
         if self._speechbrain_available and self._model is None:
@@ -196,7 +222,9 @@ class EmotionModel:
             return self._degraded_result()
 
         try:
-            if self._backend == "speechbrain":
+            if self._backend == "tensorrt":
+                return self._predict_tensorrt(audio, sample_rate)
+            elif self._backend == "speechbrain":
                 return self._predict_speechbrain(audio, sample_rate)
             elif self._backend == "wav2vec":
                 return self._predict_wav2vec(audio, sample_rate)
@@ -207,6 +235,71 @@ class EmotionModel:
             # On inference error, degrade to neutral
             print(f"[MEE-Voice] Inference error: {e}")
             return self._degraded_result()
+
+    # TASK_MEE_010: locate a TRT / INT8-ONNX engine next to the model dir
+    def _find_tensorrt_engine(self):
+        """Return path to a TensorRT or INT8-ONNX engine, or None.
+
+        Looks for:  <model_dir>/emotion_iemocap.int8.onnx
+                    <model_dir>/emotion_iemocap.onnx  (used with TRT EP via ORT)
+                    <model_dir>/*.trt
+        """
+        import glob
+        base = os.path.dirname(os.path.abspath(self.model_path))
+        candidates = [
+            os.path.join(base, "emotion_iemocap.int8.onnx"),
+            os.path.join(base, "emotion_iemocap.onnx"),
+        ]
+        candidates += sorted(glob.glob(os.path.join(base, "*.trt")))
+        for c in candidates:
+            if os.path.isfile(c) and c.endswith((".onnx", ".trt")):
+                if c.endswith(".onnx"):
+                    try:
+                        import onnxruntime as ort
+                        gpu_providers = [p for p in ort.get_available_providers()
+                                        if p in ("TensorrtExecutionProvider", "CUDAExecutionProvider")]
+                        if not gpu_providers:
+                            continue  # CPU-only ORT — prefer PyTorch backend instead
+                    except ImportError:
+                        continue
+                return c
+        return None
+
+    def _predict_tensorrt(self, audio: np.ndarray, sample_rate: int) -> VoiceResult:
+        """TASK_MEE_010: TensorRT / ONNX Runtime inference path.
+
+        Input:  [1, T] float32 audio at 16 kHz
+        Output: [1, N] logits — softmax → canonical labels via LABEL_MAP
+        """
+        arr = np.ascontiguousarray(audio, dtype=np.float32).reshape(1, -1)
+        inp_name = self._model.get_inputs()[0].name
+        logits = self._model.run(None, {inp_name: arr})[0].flatten()
+
+        z = logits - logits.max()
+        exp_z = np.exp(z)
+        probs = exp_z / exp_z.sum()
+
+        labels = getattr(self, "_onnx_labels", ["neutral", "angry", "happy", "sad"])
+        if len(labels) != len(probs):
+            labels = [str(i) for i in range(len(probs))]
+
+        best_idx = int(np.argmax(probs))
+        best_raw = labels[best_idx].lower()
+        canonical = self.LABEL_MAP.get(best_raw, best_raw)
+        if canonical not in VOICE_LABELS:
+            canonical = "neutral"
+
+        scores = {label: 0.0 for label in VOICE_LABELS}
+        for i, (raw, p) in enumerate(zip(labels, probs)):
+            c = self.LABEL_MAP.get(raw.lower(), raw.lower())
+            if c in scores:
+                scores[c] = round(float(p), 6)
+
+        return VoiceResult(
+            emotion=canonical,
+            confidence=round(float(probs[best_idx]), 4),
+            scores=scores,
+        )
 
     def _predict_speechbrain(self, audio: np.ndarray, sample_rate: int) -> VoiceResult:
         """Run emotion prediction via SpeechBrain IEMOCAP wav2vec2 model.

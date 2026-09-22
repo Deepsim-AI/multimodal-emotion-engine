@@ -220,3 +220,39 @@ class TestIntegrationNoRealModels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# TASK_MEE_010: Jetson GPU-specific tests
+# ---------------------------------------------------------------------------
+
+import pytest
+from tests.helpers import is_jetson
+
+requires_jetson = pytest.mark.skipif(
+    not is_jetson(), reason="Jetson GPU hardware required"
+)
+
+
+@pytest.mark.skipif(not is_jetson(), reason="Jetson GPU hardware required")
+def test_jetson_voice_inference_runs():
+    """Run a real voice inference cycle on Jetson GPU (no crash, valid output)."""
+    import numpy as np
+    from mee.voice.emotion_model import EmotionModel, VOICE_LABELS
+    model = EmotionModel()
+    audio = (0.3 * np.sin(2 * np.pi * 440 * np.arange(32000) / 16000)).astype(np.float32)
+    result = model.predict(audio)
+    assert result.emotion in VOICE_LABELS
+    assert 0.0 <= result.confidence <= 1.0
+    for label in VOICE_LABELS:
+        assert label in result.scores
+
+
+@pytest.mark.skipif(not is_jetson(), reason="Jetson GPU hardware required")
+def test_jetson_tensorrt_engine_detection():
+    """Verify _find_tensorrt_engine returns None gracefully when no engine file exists."""
+    from mee.voice.emotion_model import EmotionModel
+    model = EmotionModel()
+    # Should not raise; returns None or a valid path
+    result = model._find_tensorrt_engine()
+    assert result is None or isinstance(result, str)
