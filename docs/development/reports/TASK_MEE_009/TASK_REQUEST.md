@@ -5,7 +5,7 @@
 **Requested By:** PM · **Assignee:** CTO (plan) · Implementer (build) · Reviewer (verify)
 
 ## Objective
-Run the full pipeline end-to-end using the standardized test scenarios and validate that every stage works together, with measurable confidence/latency. This is the prototype gate before Jetson work.
+Run the full pipeline end-to-end using standardized test scenarios and validate that every stage works together, with measurable confidence/latency. This is the prototype gate before Jetson work.
 
 ## Detailed Requirements
 - Implement the standardized test scenarios (plan §14): Test A Neutral, Test B Happy, Test C Sad, Test D Frustrated, Test E Conflicting Modalities. Each records vision, voice, fusion, confidence, and latency.
@@ -23,12 +23,3 @@ Run the full pipeline end-to-end using the standardized test scenarios and valid
 - [ ] All 5 test scenarios run and produce structured output.
 - [ ] Vision, voice, fusion, and temporal state all exercised in one end-to-end pass.
 - [ ] Test E produces a visible conflict signal.
-- [ ] Confidence and latency measured/reported.
-- [ ] All prior-task acceptance criteria pass in the integrated flow.
-- [ ] Results reproducible from a single command.
-
-## Dependencies
-- TASK_MEE_004, 005, 006, 007 (all engine stages implemented and unit-tested).
-
-## Notes / Constraints
-- "Affective-state estimation"; never "reads true emotion." Document that outputs are probabilistic estimates.

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+**End-to-End Validation (TASK_MEE_009):**
+- `tools/evaluate_scenarios.py` — Runnable end-to-end evaluation harness
+- `tests/scenario_data.py` — Scenario definitions (5 standardized scenarios: Neutral, Happy, Sad, Frustrated/Conflict, Cross-over)
+- `tests/test_scenarios.py` — 38 tests validating full pipeline integration via monkey-patched process() path
+- `docs/TEST_PROTOCOL.md` — Evaluation methodology, expected results, pass/fail criteria
+- Full suite: 106 tests (was 68 → +38 new, zero regressions)
+
+
 ## [v0.1.0] — 2026-09-20
 
 ### Added
