@@ -3,6 +3,32 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+**Emotion Demonstration UI (TASK_MEE_008):**
+- `demo/emotion_demo.py` — Single-file Streamlit demo driving the public EmotionEngine API (589 lines)
+- Live camera + mic input, real-time face/voice/overall emotion bars, trend indicator, conflict banner, debug JSON panel
+- Headless/JSON-output mode for scripted evaluation (`--headless`)
+- Graceful degradation when camera/microphone/hardware unavailable (synthetic-input fallback)
+- `pyproject.toml` — demo extras: `streamlit>=1.28`, `sounddevice>=0.4`, `opencv-python>=4.8`
+- `docs/DEMO.md` — one-page install/run guide (GUI + headless, hardware fallbacks)
+**Jetson AGX Orin Deployment (TASK_MEE_010):**
+- `tools/export_models.py` — SpeechBrain IEMOCAP + Wav2Vec 2.0-base export utilities
+- `tools/build_trt_engine.py` — TensorRT engine builder with 3 fallback paths
+- `tools/bench_jetson.py` — Performance benchmark harness (5-component timing)
+- `tools/run_stability_test.py` — Extended stability runner with crash + drift detection
+- `docs/JETSON_DEPLOYMENT.md` — Complete deployment guide (8 sections, hardware/software/perf/limitations)
+- `mee/voice/emotion_model.py` — INT8 TensorRT auto-detection and graceful fallback
+- `tests/helpers.py` — Jetson environment detection helper (`is_jetson()`)
+- Test updates with `@pytest.mark.skipif` markers for non-Jetson hosts
+
+**Jetson AGX Orin Deployment (TASK_MEE_010):**
+- `tools/export_models.py` — SpeechBrain IEMOCAP + Wav2Vec 2.0-base export utilities
+- `tools/build_trt_engine.py` — TensorRT engine builder with 3 fallback paths
+- `tools/bench_jetson.py` — Performance benchmark harness (5-component timing)
+- `tools/run_stability_test.py` — Extended stability runner with crash + drift detection
+- `docs/JETSON_DEPLOYMENT.md` — Complete deployment guide (8 sections, hardware/software/perf/limitations)
+- `mee/voice/emotion_model.py` — INT8 TensorRT auto-detection and graceful fallback
+- `tests/helpers.py` — Jetson environment detection helper (`is_jetson()`)
+- Test updates with `@pytest.mark.skipif` markers for non-Jetson hosts
 
 **End-to-End Validation (TASK_MEE_009):**
 - `tools/evaluate_scenarios.py` — Runnable end-to-end evaluation harness

@@ -14,7 +14,8 @@
 | MEE_004 | Vision Emotion Engine | ✅ G4 Approved | 2026-09-19 |
 | MEE_005 | Voice Emotion Engine | ✅ G4 Approved | 2026-09-20 |
 | MEE_006 | Multimodal Emotion Fusion | ✅ G4 Approved | 2026-09-21 |
-| **MEE_009** | **End-to-End Validation** | **✅ G4 Approved** | **2026-09-21** |
+| MEE_008 | Emotion Demonstration UI (Streamlit) | ✅ G4 Approved | 2026-09-22 |
+| MEE_009 | End-to-End Validation | ✅ G4 Approved | 2026-09-21 |
 
 ---
 
@@ -34,7 +35,6 @@
 All core phases are complete. The multimodal emotion engine is fully validated end-to-end with synthetic data across 5 scenarios (neutral, happy, sad, frustrated/conflict, cross-over). 106 tests passing.
 
 **Next in sequence:**
-- **MEE_008** — Emotion Demo UI (streamlit) — live visualization and demo
 - **MEE_010** — Jetson AGX Orin Deployment — edge optimization and performance measurements  
 - **MEE_011** — Packaging & Documentation — final release polish
 
