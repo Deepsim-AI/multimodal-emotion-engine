@@ -181,3 +181,42 @@ class TestProcessorMultipleAudio(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIntegrationNoRealModels(unittest.TestCase):
+    """Test N: Integration — verify degraded path when no real models installed."""
+
+    def test_no_real_models_installed(self):
+        """Verify that without speechbrain/wav2vec, the system degrades correctly."""
+        from mee.voice.emotion_model import EmotionModel, VOICE_LABELS
+
+        model = EmotionModel()
+        has_backend = model._speechbrain_available or model._wav2vec_available
+
+        if not has_backend:
+            # With no real models, predict should return neutral/0.0
+            import numpy as np
+            audio = np.random.randn(16000).astype(np.float32)
+            result = model.predict(audio)
+
+            self.assertEqual(result.emotion, "neutral")
+            self.assertEqual(result.confidence, 0.0)
+            for label in VOICE_LABELS:
+                self.assertEqual(result.scores[label], 0.0)
+            # This is correct behavior — not a bug when speechbrain isn't installed
+        else:
+            # Backend importable but model may be unavailable (HF blocked, no network).
+            # predict must NOT raise — it must return a valid VoiceResult.
+            import numpy as np
+            audio = np.random.randn(16000).astype(np.float32)
+            result = model.predict(audio)
+            self.assertIn(result.emotion, VOICE_LABELS)
+            self.assertGreaterEqual(result.confidence, 0.0)
+            self.assertLessEqual(result.confidence, 1.0)
+            for label in VOICE_LABELS:
+                self.assertIn(label, result.scores)
+                self.assertGreaterEqual(result.scores[label], 0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

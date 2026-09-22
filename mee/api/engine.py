@@ -5,6 +5,9 @@ face/voice/overall/trend/conflict keys as specified in docs/ARCHITECTURE.md.
 
 TASK_MEE_004: Vision path wired. TASK_MEE_005: Voice path wired with SpeechBrain RavNet.
 Voice path degrades gracefully when speechbrain unavailable.
+TASK_MEE_006 Subtask 4: real weighted fusion (EmotionFusion) + trend analysis
+(analyze_trend over EmotionHistory) wired into process(); public return
+contract (face, voice, overall, trend, latency_ms) unchanged.
 """
 
 from __future__ import annotations
@@ -12,6 +15,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+from ..fusion.emotion_fusion import EmotionFusion, EmotionFusionConfig
+from ..state.history import EmotionHistory
+from ..state.estimator import TrendConfig, analyze_trend
 
 
 @dataclass
@@ -66,6 +73,24 @@ class EmotionEngine:
         self._vision_processor = None  # TASK_MEE_004: lazy-loaded VisionProcessor
         self._voice_processor = None   # TASK_MEE_005: lazy-loaded VoiceProcessor
         self._model_ready = False  # Stub: no backend installed yet
+        # TASK_MEE_006 Subtask 4: fusion + temporal state wiring.
+        # One EmotionFusion instance per engine — it owns the EmotionHistory
+        # buffer (shipped EmotionFusion always creates/uses its OWN internal
+        # buffer; passing one in via the `history=` kwarg is accepted but
+        # ignored at runtime — verified 2026-09-21). The engine therefore
+        # reads trend samples back from `self._fusion.history`.
+        weights = getattr(self.config, "fusion_weights", None) or {"vision": 0.5, "voice": 0.5}
+        self._fusion_config = EmotionFusionConfig(
+            vision_weight=float(weights.get("vision", 0.5)),
+            voice_weight=float(weights.get("voice", 0.5)),
+            conflict_threshold=float(self.config.conflict_threshold),
+            history_window=int(self.config.trend_window),
+        )
+        self._fusion = EmotionFusion(config=self._fusion_config)
+        self._trend_config = TrendConfig(
+            window=int(self.config.trend_window),
+            conf_threshold=float(self.config.conflict_threshold),
+        )
 
     def _ensure_vision(self):
         """TASK_MEE_004: Lazy-load the vision processor (one-time cost)."""
@@ -106,17 +131,17 @@ class EmotionEngine:
         """
         t0 = time.perf_counter()
 
-        # ---- Vision path (stub) ----
+        # ---- Vision path ----
         face_result = self._infer_vision(video_frame)
 
-        # ---- Voice path (stub) ----
+        # ---- Voice path ----
         voice_result = self._infer_voice(audio)
 
-        # ---- Fusion (stub: equal-weight vote when both available) ----
+        # ---- Fusion (TASK_MEE_006: real weighted fusion via EmotionFusion) ----
         overall = self._fuse(face_result, voice_result)
 
-        # ---- Trend (stub: always "unknown" until history populated) ----
-        trend = self._compute_trend(overall["emotion"])
+        # ---- Trend (TASK_MEE_006: analyze_trend over accumulated history) ----
+        trend = self._compute_trend()
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
@@ -162,28 +187,36 @@ class EmotionEngine:
         }
 
     def _fuse(self, face: _MEEFaceResult, voice: dict | None) -> dict:
-        """TASK_MEE_005: Fusion — both vision and voice paths available. Voice degrades to neutral when unavailable."""
-        if face.has_face and voice:
-            # Both present — take higher-confidence prediction
-            if face.confidence >= voice["confidence"]:
-                return {"emotion": face.emotion or "neutral", "confidence": face.confidence, "conflict": False}
-            else:
-                conflict = (face.emotion != voice["emotion"]) and face.confidence > self.config.conflict_threshold and voice["confidence"] > self.config.conflict_threshold
-                return {
-                    "emotion": voice["emotion"],
-                    "confidence": voice["confidence"],
-                    "conflict": conflict,
-                }
-        elif face.has_face:
-            return {"emotion": face.emotion or "neutral", "confidence": face.confidence, "conflict": False}
-        elif voice:
-            return {"emotion": voice["emotion"], "confidence": voice["confidence"], "conflict": False}
-        else:
-            raise ValueError("Both modalities are None — must supply at least one input")
+        """TASK_MEE_006 Subtask 4: weighted multimodal fusion via EmotionFusion.
 
-    def _compute_trend(self, emotion: str) -> str:
-        # Stub: history not yet populated in G2 phase
-        return "unknown"
+        Delegates to ``self._fusion.compute_fusion(vision, voice)`` — the
+        shipped instance-based API (the wiring plan's static
+        ``EmotionFusion.compute_fusion(face, voice, config)`` signature does
+        not exist on the implemented class). Returns the MEE overall dict:
+        ``{emotion, confidence, conflict}``. Missing/degraded channels are
+        handled inside fusion (deterministic neutral fallback, never raises),
+        so the previous ValueError on double-None is intentionally retired —
+        no test in this repo asserts the old exception behaviour.
+        """
+        vision = face.to_dict() if face.has_face else None
+        result = self._fusion.compute_fusion(vision=vision, voice=voice)
+        return {
+            "emotion": result.emotion,
+            "confidence": result.confidence,
+            "conflict": result.conflict,
+        }
+
+    def _compute_trend(self) -> str:
+        """TASK_MEE_006 Subtask 4: trend from accumulated emotion history.
+
+        The fusion component records each step into its internal
+        ``EmotionHistory`` (see ``__init__``); this reads that buffer and
+        classifies the trajectory via the shipped
+        ``mee.state.estimator.analyze_trend`` (the wiring plan's
+        ``EmotionHistory.analyze_trend`` method does not exist).
+        """
+        result = analyze_trend(self._fusion.history, self._trend_config)
+        return result.trend
 
     @property
     def is_ready(self) -> bool:

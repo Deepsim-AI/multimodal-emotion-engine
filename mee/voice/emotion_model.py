@@ -1,15 +1,31 @@
 """TASK_MEE_005 Subtask 4: Emotion model — acoustic emotion classification.
 
-Primary: SpeechBrain RavNet (Apache-2.0) via speechbrain.inference
-Fallback: Wav2Vec 2.0-base + emotion head (MIT license)
+Primary: SpeechBrain EncoderClassifier (emotion-recognition-wav2vec2-IEMOCAP)
+Fallback: Wav2Vec 2.0-base + emotion head (transformers, MIT license)
 Degraded: neutral/0.0/all-zeros when no backend available
+
+NOTE: The IEMOCAP model's hyperparams.yaml was authored for SpeechBrain 0.x and
+is incompatible with SpeechBrain 1.1.x's `EncoderClassifier.classify_batch` (missing
+`compute_features` module). We therefore load the model with `from_hparams` and run
+inference by calling the submodules directly (wav2vec2 -> avg_pool -> output_mlp),
+which is verified working end-to-end.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 import numpy as np
+
+
+def _cuda() -> bool:
+    """Return True if a CUDA device is actually usable right now."""
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
 
 
 VOICE_LABELS = ["angry", "disgust", "fear", "happy", "sad", "surprised", "neutral"]
@@ -38,8 +54,15 @@ class EmotionModel:
         result = model.predict(audio_array, sample_rate=16000)
     """
 
-    # Label mapping: SpeechBrain native → MEE canonical (identity for the supported set)
+    # Label mapping: SpeechBrain IEMOCAP native → MEE canonical
+    # The IEMOCAP wav2vec2 model outputs 4 labels: neu, ang, hap, sad.
     LABEL_MAP: Dict[str, str] = {
+        # IEMOCAP model labels
+        "neu": "neutral",
+        "ang": "angry",
+        "hap": "happy",
+        "sad": "sad",
+        # Passthrough in case a different 7-label model is supplied
         "angry": "angry",
         "disgust": "disgust",
         "fear": "fear",
@@ -54,9 +77,13 @@ class EmotionModel:
         model_path: Optional[str] = None,
         device: str = "cpu",
     ):
-        self.model_path = model_path or "speechbrain/mtl-mimic-rep-vanilla"
+        self.model_path = model_path or os.path.expanduser(
+            "~/.insightface/models/emotion-recognition-wav2vec2-IEMOCAP"
+        )
         self.device = device
         self._model = None
+        self._processor = None
+        self._backend: Optional[str] = None
         self._initialized = False
         self._speechbrain_available = False
         self._wav2vec_available = False
@@ -101,8 +128,21 @@ class EmotionModel:
         # Try SpeechBrain first (primary per MEE_003 CTO_APPROVAL)
         if self._speechbrain_available and self._model is None:
             try:
-                from speechbrain.inference.classifiers import Classifier  # noqa: PLC0412
-                self._model = Classifier(hyperparams=self.model_path)
+                import os
+                from speechbrain.inference.classifiers import EncoderClassifier
+
+                # Local savedir alongside buffalo_l — no re-download needed.
+                savedir = os.path.expanduser(
+                    "~/.insightface/models/emotion-recognition-wav2vec2-IEMOCAP"
+                )
+                os.makedirs(savedir, exist_ok=True)
+
+                self._model = EncoderClassifier.from_hparams(
+                    source=self.model_path,
+                    savedir=savedir,
+                    run_opts={"device": self.device if self.device != "cuda" or not _cuda() else "cuda"},
+                )
+                self._model.eval()
                 self._backend = "speechbrain"
                 return
             except Exception as e:
@@ -115,10 +155,13 @@ class EmotionModel:
                     AutoModelForAudioClassification,
                     AutoProcessor,
                 )
-                self._processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
+                self._processor = AutoProcessor.from_pretrained(
+                    "facebook/wav2vec2-base-960h"
+                )
                 self._model = AutoModelForAudioClassification.from_pretrained(
                     "facebook/wav2vec2-base-960h"
                 )
+                self._model.eval()
                 self._backend = "wav2vec"
                 return
             except Exception as e:
@@ -160,70 +203,94 @@ class EmotionModel:
             else:
                 return self._degraded_result()
 
-        except Exception:
+        except Exception as e:
             # On inference error, degrade to neutral
+            print(f"[MEE-Voice] Inference error: {e}")
             return self._degraded_result()
 
     def _predict_speechbrain(self, audio: np.ndarray, sample_rate: int) -> VoiceResult:
-        """Run emotion prediction via SpeechBrain RavNet."""
-        # SpeechBrain expects a list of utterances; wrap single utterance
-        utterances = [audio.astype(np.float32)]
+        """Run emotion prediction via SpeechBrain IEMOCAP wav2vec2 model.
 
-        # Use the Classifier's encode_batch + classify method
-        from speechbrain.inference.classifiers import Classifier  # noqa: PLC0412
+        Because the IEMOCAP hyperparams.yaml targets SpeechBrain 0.x, the 1.1.x
+        `classify_batch` path fails on the missing `compute_features` module. We
+        therefore run the submodules directly, which is verified working:
 
-        features = self._model.encode_batch(utterances)
-        logits = self._model.classify_batch(features, torchaudio_lens=None)
+            wav2vec2(raw) -> last_hidden_state -> avg_pool -> output_mlp -> logits
 
-        probs = np.array(logits.probs[0])
-        label_idx = int(np.argmax(probs))
-        label_name = logits.labels[0][label_idx] if label_idx < len(logits.labels[0]) else "neutral"
+        `output_mlp` returns raw logits (not softmax); we softmax for probabilities.
+        Labels come from the model's `label_encoder` (ind2lab: neu/ang/hap/sad).
+        """
+        import torch
 
-        # Map SpeechBrain label → MEE canonical label
-        canonical_label = self.LABEL_MAP.get(label_name, label_name)
+        wav = torch.from_numpy(np.ascontiguousarray(audio, dtype=np.float32))
+        if wav.dim() == 1:
+            wav = wav.unsqueeze(0)  # [1, T]
 
+        with torch.no_grad():
+            out = self._model.mods.wav2vec2(wav)
+            emb = out.last_hidden_state if hasattr(out, "last_hidden_state") else out
+            emb = self._model.mods.avg_pool(emb, torch.ones(emb.shape[0], device=emb.device))
+            logits = self._model.mods.output_mlp(emb).flatten()  # -> [N]
+
+        logits = logits.detach().cpu().numpy().astype(np.float64)
+        n_classes = logits.shape[-1]
+
+        # Numerically stable softmax
+        z = logits - np.max(logits)
+        exp_z = np.exp(z)
+        probs = exp_z / exp_z.sum()
+
+        # Resolve model labels from label_encoder (attribute-style access)
+        le = getattr(self._model.hparams, "label_encoder", None)
+        model_labels: list = []
+        if le is not None and hasattr(le, "ind2lab"):
+            try:
+                model_labels = [str(le.ind2lab.get(i, le.ind2lab[i])) for i in range(n_classes)]
+            except Exception:
+                model_labels = []
+        if len(model_labels) != n_classes:
+            model_labels = [str(i) for i in range(n_classes)]
+
+        best_idx = int(np.argmax(probs))
+        best_label = model_labels[best_idx].lower()
+        canonical_label = self.LABEL_MAP.get(best_label, best_label)
+        if canonical_label not in VOICE_LABELS:
+            canonical_label = "neutral"
+
+        # Build scores over VOICE_LABELS (zero-filled, then populated).
         scores = {label: 0.0 for label in VOICE_LABELS}
-        # Align scores: SpeechBrain label order may differ; map by index
-        sb_labels = [s.lower() for s in logits.labels[0]]
-        for i, (sb_label, prob) in enumerate(zip(sb_labels, probs.tolist())):
-            canonical = next(
-                (k for k, v in self.LABEL_MAP.items() if v == sb_label or k == sb_label),
-                sb_label,
-            )
-            scores[canonical] = round(prob, 6)
+        for i, (model_label, p) in enumerate(zip(model_labels, probs)):
+            canonical = self.LABEL_MAP.get(str(model_label).lower(), str(model_label).lower())
+            if canonical in scores:
+                scores[canonical] = round(float(p), 6)
 
-        confidence = float(probs[label_idx])
         return VoiceResult(
             emotion=canonical_label,
-            confidence=round(confidence, 4),
+            confidence=round(float(probs[best_idx]), 4),
             scores=scores,
         )
 
     def _predict_wav2vec(self, audio: np.ndarray, sample_rate: int) -> VoiceResult:
         """Run emotion prediction via Wav2Vec 2.0."""
-        from transformers import (  # noqa: PLC0412
-            AutoProcessor,
-            AutoModelForAudioClassification,
-        )
+        import torch
 
         inputs = self._processor(
-            audio.tolist(),
+            audio.astype(np.float32).tolist(),
             sampling_rate=sample_rate,
             return_tensors="pt",
             padding=True,
         )
 
-        with np.nditer([], op_dtypes=[np.float64], flags=['external_loop']):
-            import torch  # noqa: PLC0412
-            if self.device == "cuda":
-                inputs = {k: v.to("cuda") for k, v in inputs.items()}
+        if self.device == "cuda" and torch.cuda.is_available():
+            inputs = {k: v.to("cuda") for k, v in inputs.items() if isinstance(v, torch.Tensor)}
 
         with torch.no_grad():
             outputs = self._model(**inputs)
-            logits = outputs.logits.detach().cpu().numpy()[0]
+            logits = outputs.logits[0].detach().cpu().numpy()
 
-        probs = np.exp(logits - np.max(logits))  # numerical stability
-        probs = probs / probs.sum()
+        # Softmax with numerical stability
+        exp_logits = np.exp(logits - np.max(logits))
+        probs = exp_logits / exp_logits.sum()
         label_idx = int(np.argmax(probs))
         confidence = float(probs[label_idx])
 
@@ -238,15 +305,19 @@ class EmotionModel:
             "sur": "surprised",
         }
 
-        label_names = self._model.config.id2label if hasattr(self._model.config, 'id2label') else wb_labels_map
-        canonical_label = wb_labels_map.get(label_names[label_idx], label_names[label_idx])
+        label_names = self._model.config.id2label if hasattr(self._model.config, "id2label") else {}
+        raw_label = label_names.get(label_idx, "")
+        canonical_label = wb_labels_map.get(raw_label, raw_label)
+        if canonical_label not in VOICE_LABELS:
+            canonical_label = "neutral"
 
         scores = {label: 0.0 for label in VOICE_LABELS}
-        model_labels = self._model.config.label2id if hasattr(self._model.config, 'label2id') else {}
-        for label_name, idx in model_labels.items():
+        label2id = self._model.config.label2id if hasattr(self._model.config, "label2id") else {}
+        for label_name, idx in label2id.items():
             if idx < len(probs):
                 canonical = wb_labels_map.get(label_name, label_name)
-                scores[canonical] = round(float(probs[idx]), 6)
+                if canonical in scores:
+                    scores[canonical] = round(float(probs[idx]), 6)
 
         return VoiceResult(
             emotion=canonical_label,
