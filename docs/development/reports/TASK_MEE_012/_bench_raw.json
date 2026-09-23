@@ -1,0 +1,53 @@
+{
+  "backend": {
+    "detector": "retinaface",
+    "detector_available": true,
+    "aligner_available": true,
+    "emotion_available": true
+  },
+  "S1_detection": {
+    "mean_ms": 1143.23,
+    "p95_ms": 1627.974,
+    "p99_ms": 1744.851,
+    "min_ms": 1009.816,
+    "max_ms": 1744.851,
+    "fps": 0.87,
+    "faces_found": 0
+  },
+  "S2_alignment": {
+    "note": "no face detected; skipped"
+  },
+  "S3_emotion_inference": {
+    "mean_ms": 49.866,
+    "p95_ms": 90.91,
+    "p99_ms": 109.62,
+    "min_ms": 23.794,
+    "max_ms": 146.864,
+    "fps": 20.05,
+    "conf_mean": 0.3186,
+    "conf_std": 0.0,
+    "distinct_predictions": 1,
+    "dominant_emotion": "fear"
+  },
+  "E2E_process": {
+    "mean_ms": 1110.884,
+    "p95_ms": 1582.527,
+    "p99_ms": 1676.525,
+    "min_ms": 1003.511,
+    "max_ms": 1676.525,
+    "fps": 0.9
+  },
+  "MEM_stability": {
+    "samples": 162,
+    "rss_start_mb": 1826.9,
+    "rss_end_mb": 1931.43,
+    "rss_max_mb": 1961.46,
+    "rss_min_mb": 1248.82,
+    "drift_pct": 5.722
+  },
+  "_meta": {
+    "host": "deepsim",
+    "total_run_s": 374.0,
+    "numpy": "1.26.4"
+  }
+}
