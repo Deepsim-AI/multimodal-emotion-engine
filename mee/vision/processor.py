@@ -1,9 +1,10 @@
-"""TASK_MEE_004 Task 4: Vision processor — orchestrates detection + emotion per frame.
+"""TASK_MEE_004 Task 4 (rewired for TASK_MEE_011 three-stage pipeline):
+Vision processor — orchestrates detection + alignment + emotion per frame.
 
-Pipeline:
-  1. FaceDetector.detect(frame) → list[Face]
-  2. For each face: crop, EmotionModel.predict(crop) → emotion scores
-  3. Return VisionResult with per-face scores, best-face label, and has_face
+Pipeline (commercially-safe, see docs/THIRD_PARTY_LICENSES.md):
+  1. FaceDetector.detect(frame)  → list[Face]            (Stage 1, MIT/OpenCV)
+  2. FaceAligner.align(frame,f)  → aligned RGB crop       (Stage 2, Apache-2.0)
+  3. EmotionModel.predict(crop)  → emotion scores          (Stage 3, Apache-2.0)
 
 Public entry point:
   process(frame) → VisionResult
@@ -12,10 +13,12 @@ Public entry point:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 
 from .detector import FaceDetector, Face
+from .alignment import FaceAligner
 from .emotion_model import EmotionModel
 
 
@@ -39,21 +42,18 @@ class VisionResult:
       face_count, faces, best_emotion, best_confidence, channel_scores
     """
     has_face: bool = False
-    # TASK_MEE_004: fields expected by EmotionEngine
     emotion: str = ""
     confidence: float = 0.0
     scores: dict = field(default_factory=dict)
     face_count: int = 0
     faces: list = field(default_factory=list)
-    # Best-face (highest confidence) summary
     best_emotion: str = ""
     best_confidence: float = 0.0
-    # Per-channel (here just "vision") result
     channel_scores: dict = field(default_factory=dict)
 
 
 class VisionProcessor:
-    """Combines FaceDetector + EmotionModel into a single call per frame.
+    """Combines FaceDetector + FaceAligner + EmotionModel into one call/frame.
 
     Usage:
         vp = VisionProcessor()
@@ -62,10 +62,28 @@ class VisionProcessor:
             print(result.best_emotion, result.best_confidence)
     """
 
-    def __init__(self, detector=None, emotion_model=None):
-        # Lazy init: allows injection for testing
-        self._detector = detector or FaceDetector()
-        self._emotion = emotion_model or EmotionModel()
+    def __init__(self,
+                 detector: Optional[FaceDetector] = None,
+                 aligner: Optional[FaceAligner] = None,
+                 emotion_model: Optional[EmotionModel] = None,
+                 model_path: Optional[str] = None,
+                 confidence_threshold: float = 0.5,
+                 aligner_size: int = 224):
+        """
+        Args:
+            detector: inject for tests; default FaceDetector().
+            aligner: inject for tests; default FaceAligner() if available.
+            emotion_model: inject for tests; default EmotionModel().
+            model_path: forwarded to EmotionModel (optional explicit path).
+            confidence_threshold: forwarded to FaceDetector.
+            aligner_size: crop size for Stage 2 (default 224).
+        """
+        self._detector = detector or FaceDetector(
+            model_path=model_path,
+            confidence_threshold=confidence_threshold,
+        )
+        self._aligner = aligner  # may be None (degrade to direct crop)
+        self._emotion = emotion_model or EmotionModel(model_path=model_path)
 
     def process(self, frame_bgr: np.ndarray) -> VisionResult:
         """Process one BGR frame.
@@ -93,11 +111,18 @@ class VisionProcessor:
 
         face_results: list[FaceEmotion] = []
         for face in faces:
-            # TASK_MEE_004: use crop_face and Face.bbox
-            crop = self._detector.crop_face(frame_bgr, face)
+            # Stage 2: align (preferred) or fall back to a direct crop.
+            crop = None
+            if self._aligner is not None and self._aligner.available:
+                try:
+                    crop = self._aligner.align(frame_bgr, face)
+                except Exception:  # noqa: S110
+                    crop = None
+            if crop is None:
+                crop = self._detector.crop_face(frame_bgr, face)
+
             pred = self._emotion.predict(frame_bgr, face_crop=crop)
-            bbox = face.bbox
-            x1, y1, x2, y2 = (float(v) for v in bbox)
+            x1, y1, x2, y2 = (float(v) for v in np.asarray(face.bbox).reshape(4))
             face_results.append(FaceEmotion(
                 label=pred["emotion"],
                 confidence=pred["confidence"],

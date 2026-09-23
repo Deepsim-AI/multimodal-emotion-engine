@@ -49,7 +49,7 @@ def run_latency_test(name: str, func, runs: int = 100) -> LatencyStats:
 def test_detection():
     """Benchmark face detection speed."""
     try:
-        from deepefflib.detector import FaceDetector
+        from mee.vision.detector import FaceDetector
         det = FaceDetector()
         
         # Generate synthetic frame (640x480 BGR)
@@ -69,21 +69,21 @@ def test_detection():
 def test_expression():
     """Benchmark expression inference speed."""
     try:
-        from deepefflib.emotion_model import ExpressionClassifier, MEE_LABELS
+        from mee.vision.emotion_model import EmotionModel, MEE_LABELS
         
         # Load EmotiEffLib model
-        classifier = ExpressionClassifier(model_name="enet_b0_8_best_vgaf")
+        classifier = EmotionModel(model_name="enet_b0_8_best_vgaf")
         
         if not classifier.is_available():
             print("⚠️ No expression model available — skipping test")
             return None
             
-        # Generate synthetic 112x112 face crop (RGB)
+        # Generate synthetic 224x224 face crop (RGB uint8)
         import numpy as np
-        fake_crop = np.random.rand(112, 112, 3).astype(np.float32)
+        fake_crop = (np.random.rand(224, 224, 3) * 255).astype(np.uint8)
         
         def bench_func():
-            return classifier.infer(fake_crop)
+            return classifier.predict(face_crop=fake_crop)
             
         return bench_func
     except Exception as e:

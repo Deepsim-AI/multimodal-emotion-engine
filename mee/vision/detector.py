@@ -1,341 +1,320 @@
-"""TASK_MEE_011 TASK_MEE_012: Commercially-safe face detector.
+"""TASK_MEE_011: Stage 1 — Face Detection.
 
-Replaces InsightFace SCRFD/buffalo_l (non-commercial weights) with a pipeline
-of independently licensed components.
+Commercially-safe face detector. Replaces InsightFace SCRFD/buffalo_l
+(non-commercial research-only weights) with independently licensed components.
 
-Stage 1 — Detection: retina-face (MIT)
-Stage 2 — Alignment/Cropping: face_alignment (Apache-2.0)
-Stage 3 — Expression: EmotiEffLib (Apache-2.0 for code + weights)
+Production pipeline (all stages independently licensed):
+  Stage 1 — Detection:    retina-face (MIT) — primary; OpenCV HOG DNN — fallback
+  Stage 2 — Alignment:    face_alignment (Apache-2.0)  → see mee/vision/alignment.py
+  Stage 3 — Expression:   EmotiEffLib (Apache-2.0 code + weights) → see emotion_model.py
 
-This file handles Stage 1 (detection only). It returns bounding boxes
-with landmarks suitable for Stage 2 alignment. No face recognition/ID is performed.
+This module handles Stage 1 ONLY. It returns bounding boxes with optional
+landmarks. No face recognition / biometric identification is performed.
 
-⚠️ buffalo_l (insightface) detection has been removed from the production pipeline
-   because its pretrained model weights are non-commercial research-only per
-   InsightFace's official license policy:
-     "The training data containing the annotation (and the models trained with
-      these data) are available for non-commercial research purposes only."
-
-   See docs/THIRD_PARTY_LICENSES.md for the full license inventory.
+⚠️  buffalo_l / InsightFace is intentionally ABSENT from the production path.
+    Per InsightFace's official license: "The training data containing the
+    annotation (and the models trained with these data) are available for
+    non-commercial research purposes only."
+    See docs/THIRD_PARTY_LICENSES.md for the full inventory.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
-# ── Primary detector: retina-face (MIT) ─────────────────────────────────────
-try:
-    from retinaface import RetinaFace  # type: ignore
-    _RETINAFACE_AVAILABLE = True
-except Exception:  # noqa: S110
-    _RETINAFACE_AVAILABLE = False
-
-# ── Fallback: dlib HOG detector (Boost 1.0) ────────────────────────────────
-try:
-    import dlib  # type: ignore
-    _DLIB_AVAILABLE = True
-except Exception:  # noqa: S110
-    _DLIB_AVAILABLE = False
+# ---------------------------------------------------------------------------
+# Research-only path (NON-PRODUCTION) — guarded by env var.
+#   INSIGHTFACE_RESEARCH_ONLY=true  → allows loading buffalo_l for benchmarking.
+#   Default (unset/false): insightface is NEVER imported in the production path.
+# ---------------------------------------------------------------------------
+RESEARCH_ONLY_ENABLED = (
+    os.environ.get("INSIGHTFACE_RESEARCH_ONLY", "").strip().lower()
+    in ("1", "true", "yes", "on")
+)
 
 
+# ---------------------------------------------------------------------------
+# Backends (detected lazily — a failing import must not break the module)
+# ---------------------------------------------------------------------------
+def _try_retinaface():
+    """Import retina-face (MIT). Returns a factory or None.
+
+    Note: retina-face 0.0.18 requires the ``tf-keras`` package alongside
+    TensorFlow >= 2.16; if the import fails we fall back to OpenCV DNN HOG.
+    """
+    try:
+        from retinaface import RetinaFace  # type: ignore
+        return RetinaFace
+    except Exception:  # noqa: S110
+        return None
+
+
+def _try_dlib():
+    try:
+        import dlib  # type: ignore
+        return dlib
+    except Exception:  # noqa: S110
+        return None
+
+
+def _try_insightface_research():
+    """Research-only: import insightface. NEVER used unless the env flag is set."""
+    if not RESEARCH_ONLY_ENABLED:
+        return None
+    try:
+        import insightface  # type: ignore
+        return insightface
+    except Exception:  # noqa: S110
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Data class
+# ---------------------------------------------------------------------------
 @dataclass
-class FaceBox:
-    """A detected face bounding box with optional landmarks."""
-    x1: float           # top-left x (pixels)
-    y1: float           # top-left y
-    x2: float           # bottom-right x
-    y2: float           # bottom-right y
-    score: float        # detection confidence 0..1
-    landmarks: Optional[list[tuple[float, float]]] = None   # [(x,y), ...] or None
+class Face:
+    """A detected face: bounding box (x1, y1, x2, y2 in pixels) + score.
+
+    ``landmarks`` holds 5-point landmarks [(x, y) * 5] when the backend
+    provides them (retina-face), else None.
+    """
+    bbox: np.ndarray                    # (4,) float array [x1, y1, x2, y2]
+    det_score: float = 1.0              # 0..1 confidence
+    landmarks: Optional[np.ndarray] = None  # (5, 2) or None
 
 
+# ---------------------------------------------------------------------------
+# OpenCV HOG person detector — dependency-light fallback (opencv ships bundled)
+# ---------------------------------------------------------------------------
+def _detect_opencv_hog(frame_bgr: np.ndarray) -> list[Face]:
+    """Detect faces with OpenCV's bundled HOG person detector.
+
+    Conservative: returns only boxes that look face-sized/aspect-ratio, and
+    does not provide confidence scores (all scored 0.5).
+    """
+    import cv2  # local import: keeps module import cheap when cv2 is absent
+
+    h, w = frame_bgr.shape[:2]
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY) if frame_bgr.ndim == 3 else frame_bgr
+
+    detector = cv2.HOGDescriptor()
+    detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    rects, _ = detector.detectMultiScale(gray, winSize=(64, 128), stepSize=(8, 8),
+                                        padding=(4, 4), groups=1)
+
+    faces: list[Face] = []
+    for (x, y, bw, bh) in rects:
+        # Keep only face-plausible boxes: aspect 0.4..1.4, not the whole frame
+        aspect = bh / max(bw, 1)
+        if not (0.4 <= aspect <= 1.4):
+            continue
+        if bw * bh > 0.9 * w * h:
+            continue
+        faces.append(Face(
+            bbox=np.array([float(x), float(y), float(x + bw), float(y + bh)], dtype=np.float32),
+            det_score=0.5,
+        ))
+
+    faces.sort(key=lambda f: float(f.bbox[2] - f.bbox[0]) * float(f.bbox[3] - f.bbox[1]),
+               reverse=True)
+    return faces
+
+
+# ---------------------------------------------------------------------------
+# Primary detector
+# ---------------------------------------------------------------------------
 class FaceDetector:
-    """Face detector — production pipeline using retina-face (MIT).
+    """Production face detector.
+
+    Backend resolution order (first that loads wins):
+      1. retina-face (MIT)  — primary, provides 5-point landmarks
+      2. dlib HOG           — optional extra
+      3. OpenCV HOG person  — dependency-light fallback
 
     Usage:
         if FaceDetector.is_available():
             det = FaceDetector()
-            faces = det.detect(frame_bgr)  -> list[FaceBox]
+            faces = det.detect(frame_bgr)   # list[Face]
+            crop  = det.crop_face(frame_bgr, face)
     """
 
-    def __init__(self, use_retinaface: bool = True):
-        """Initialize detector.
+    def __init__(self, model_path: Optional[str] = None,
+                 confidence_threshold: float = 0.5,
+                 use_retinaface: bool = True):
+        self._model_path = model_path
+        self._confidence_threshold = float(confidence_threshold)
 
-        Args:
-            use_retinaface: Prefer retina-face if available (default True).
-                           Set False to force dlib HOG fallback regardless.
-        """
-        self._use_retinaface = use_retinaface and _RETINAFACE_AVAILABLE
-        self._detector_type = "retinaface" if self._use_retinaface else ("dlib" if _DLIB_AVAILABLE else None)
+        RetinaFace = _try_retinaface() if use_retinaface else None
+        dlib = _try_dlib()
 
+        if RetinaFace is not None:
+            self._backend = "retinaface"
+            self._RetinaFace = RetinaFace
+        elif dlib is not None:
+            self._backend = "dlib"
+            self._dlib = dlib
+        else:
+            self._backend = "opencv_hog"
+            self._cv2 = None  # lazy
+        self._RetinaFace = RetinaFace
+        self._dlib = dlib
+
+    # -- availability ------------------------------------------------------
     @property
     def available(self) -> bool:
-        """Return True if any detector backend is available."""
-        return self._detector_type is not None
+        return True  # open_hog fallback guarantees a usable backend
 
     @staticmethod
     def is_available() -> bool:
-        """True if retina-face or dlib HOG detector is importable."""
-        return _RETINAFACE_AVAILABLE or _DLIB_AVAILABLE
+        """True if any detection backend can be imported.
 
-    # ── Public API ──────────────────────────────────────────────────────────────
-
-    def detect(self, frame_bgr: np.ndarray) -> list[FaceBox]:
-        """Detect faces in a BGR numpy frame.
-
-        Args:
-            frame_bgr: (H, W, 3) uint8 array.
-
-        Returns:
-            List of FaceBox objects sorted by confidence descending.
-            Empty list if no faces found or detector unavailable.
+        Always True in practice because the OpenCV HOG path only needs ``cv2``.
+        Returns False only if cv2 itself is unavailable.
         """
-        if not self.available:
+        try:
+            import cv2  # noqa: F401
+            return True
+        except Exception:  # noqa: S110
+            return False
+
+    @property
+    def model_type(self) -> str:
+        return self._backend
+
+    # -- public API --------------------------------------------------------
+    def detect(self, frame_bgr: np.ndarray) -> list[Face]:
+        """Detect faces in a BGR frame.
+
+        Returns a list of :class:`Face` (may be empty). Never raises on
+        no-face; backend-specific exceptions are swallowed and degrade to [].
+        """
+        if frame_bgr is None or not isinstance(frame_bgr, np.ndarray):
+            return []
+        try:
+            if self._backend == "retinaface":
+                faces = self._detect_retinaface(frame_bgr)
+            elif self._backend == "dlib":
+                faces = self._detect_dlib(frame_bgr)
+            else:
+                faces = _detect_opencv_hog(frame_bgr)
+        except Exception:  # noqa: S110
             return []
 
-        try:
-            if self._detector_type == "retinaface":
-                return self._detect_retinaface(frame_bgr)
-            elif self._detector_type == "dlib":
-                return self._detect_dlib(frame_bgr)
-        except Exception:
-            pass
+        # Threshold filter
+        return [f for f in faces if f.det_score >= self._confidence_threshold]
 
-        return []
-
-    def crop_face(
-        self,
-        frame_bgr: np.ndarray,
-        face: FaceBox,
-        margin: float = 0.2,
-    ) -> Optional[np.ndarray]:
-        """Crop the face region with fractional padding.
+    def crop_face(self, frame_bgr: np.ndarray, face: Face,
+                  margin: float = 0.2) -> Optional[np.ndarray]:
+        """Crop a detected face with fractional margin padding.
 
         Args:
-            frame_bgr: (H, W, 3) uint8 array.
-            face: Detected face box.
-            margin: Fractional margin on all sides (default 20%).
+            frame_bgr: (H, W, 3) uint8 BGR frame.
+            face: Detected :class:`Face`.
+            margin: fractional margin on all sides (default 20%).
 
         Returns:
-            Cropped face region as uint8 (H', W', 3) array, or None if crop fails.
+            Cropped BGR uint8 array, or None on failure.
         """
         h, w = frame_bgr.shape[:2]
-        x1 = max(0, int(face.x1))
-        y1 = max(0, int(face.y1))
-        x2 = min(w, int(face.x2))
-        y2 = min(h, int(face.y2))
+        x1, y1, x2, y2 = (int(v) for v in np.asarray(face.bbox).astype(int))
+        x1 = max(0, x1); y1 = max(0, y1)
+        x2 = min(w, x2); y2 = min(h, y2)
 
-        mx = margin * (x2 - x1) if (x2 - x1) > 0 else 0
-        my = margin * (y2 - y1) if (y2 - y1) > 0 else 0
+        bw, bh = max(x2 - x1, 1), max(y2 - y1, 1)
+        mx, my = int(margin * bw), int(margin * bh)
 
-        cx1 = max(0, int(x1 - mx))
-        cy1 = max(0, int(y1 - my))
-        cx2 = min(w, int(x2 + mx))
-        cy2 = min(h, int(y2 + my))
+        cx1 = max(0, x1 - mx)
+        cy1 = max(0, y1 - my)
+        cx2 = min(w, x2 + mx)
+        cy2 = min(h, y2 + my)
 
+        if cx2 <= cx1 or cy2 <= cy1:
+            return None
         return frame_bgr[cy1:cy2, cx1:cx2].copy()
 
-    # ── Internal detectors ───────────────────────────────────────────────────────
-
-    @staticmethod
-    def _detect_retinaface(frame_bgr: np.ndarray) -> list[FaceBox]:
-        """Detect faces using retina-face."""
-        # retina-face accepts RGB — convert from BGR
+    # -- backends ----------------------------------------------------------
+    def _detect_retinaface(self, frame_bgr: np.ndarray) -> list[Face]:
+        """Detect via retina-face (MIT). Expects RGB input."""
         frame_rgb = frame_bgr[:, :, ::-1].copy() if frame_bgr.ndim == 3 else frame_bgr
-        
-        try:
-            detected = RetinaFace.detect_faces(frame_rgb)
-        except Exception:
+        detected = self._RetinaFace.detect_faces(frame_rgb)
+        if not detected:
             return []
 
-        faces: list[FaceBox] = []
-        for face_id, info in detected.items():
-            bbox = info['bbox']
-            # Normalize to [0, 1] if needed (retina-face may return pixel coords or normalized)
-            x1, y1, x2, y2 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-            
-            # Check if coords are normalized (0-1) — retinaface usually returns pixel coords
-            # but verify we're in valid range for the frame dimensions
-            h, w = frame_bgr.shape[:2]
-            if x2 > w or y2 > h:
-                # Already pixel coordinates, use as-is
-                pass
-            else:
-                # Normalize coords (0-1) — scale to pixel coords
-                x1, y1, x2, y2 = (
-                    x1 * w, y1 * h,
-                    x2 * w, y2 * h
-                )
-            
-            score = float(info.get('confidence', 0.0)) if info.get('confidence') is not None else 0.0
+        h, w = frame_bgr.shape[:2]
+        faces: list[Face] = []
+        for _face_id, info in detected.items():
+            bbox = np.asarray(info["bbox"], dtype=np.float32).reshape(4)
+            x1, y1, x2, y2 = (float(v) for v in bbox)
+            # retina-face returns pixel coords; clamp to frame
+            x1, y1 = max(0.0, x1), max(0.0, y1)
+            x2, y2 = min(float(w), x2), min(float(h), y2)
+            score = float(info.get("confidence") or 0.0)
 
-            # Extract landmarks if available
             landmarks = None
-            kp = info.get('keypoints')
+            kp = info.get("keypoints")
             if kp is not None:
-                landmarks = [(float(p[0]), float(p[1])) for p in kp]
+                landmarks = np.asarray(kp, dtype=np.float32).reshape(-1, 2)
 
-            faces.append(FaceBox(
-                x1=x1, y1=y1, x2=x2, y2=y2,
-                score=score,
+            faces.append(Face(
+                bbox=np.array([x1, y1, x2, y2], dtype=np.float32),
+                det_score=score,
                 landmarks=landmarks,
             ))
 
-        # Sort by confidence descending
-        faces.sort(key=lambda f: f.score, reverse=True)
+        faces.sort(key=lambda f: f.det_score, reverse=True)
         return faces
 
-    @staticmethod
-    def _detect_dlib(frame_bgr: np.ndarray) -> list[FaceBox]:
-        """Detect faces using dlib HOG detector (fallback)."""
+    def _detect_dlib(self, frame_bgr: np.ndarray) -> list[Face]:
+        """Detect via dlib HOG (fallback)."""
+        import cv2  # noqa: F401 (ensure available)
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY) if frame_bgr.ndim == 3 else frame_bgr
-        
-        # Use grayscale for faster processing
-        if frame_bgr.dtype != np.uint8:
+        if gray.dtype != np.uint8:
             gray = gray.astype(np.uint8)
-        
-        detector = dlib.get_frontal_face_detector()
-        rects = detector(gray, 1)  # +1 pyramid level
 
-        h, w = frame_bgr.shape[:2]
-        faces: list[FaceBox] = []
+        detector = self._dlib.get_frontal_face_detector()
+        rects = detector(gray, 1)
+
+        faces: list[Face] = []
         for rect in rects:
-            x1, y1, x2, y2 = float(rect.left()), float(rect.top()), float(rect.right()), float(rect.bottom())
-            score = 1.0  # dlib HOG doesn't provide confidence scores
-
-            faces.append(FaceBox(
-                x1=x1, y1=y1, x2=x2, y2=y2,
-                score=score,
-                landmarks=None,  # dlib HOG doesn't return landmarks directly
+            faces.append(Face(
+                bbox=np.array([float(rect.left()), float(rect.top()),
+                               float(rect.right()), float(rect.bottom())],
+                              dtype=np.float32),
+                det_score=0.8,  # dlib HOG has no confidence; use a fixed score
             ))
-
-        faces.sort(key=lambda f: f.score, reverse=True)
+        faces.sort(key=lambda f: float(f.bbox[2] - f.bbox[0]) * float(f.bbox[3] - f.bbox[1]),
+                   reverse=True)
         return faces
 
 
-# ── Utility: face_alignment-based alignment (Stage 2) ───────────────────────────────
+# ---------------------------------------------------------------------------
+# Research-only convenience (NON-PRODUCTION, buffalo_l)
+# ---------------------------------------------------------------------------
+def detect_research_only(frame_bgr: np.ndarray) -> list[Face]:
+    """⚠️ RESEARCH-ONLY: buffalo_l (InsightFace SCRFD) detection.
 
-class FaceAligner:
-    """Face alignment via face_alignment library (Apache-2.0).
-
-    Takes detected face boxes and returns aligned crops suitable for expression models.
-    Uses 68-point facial landmarks for accurate crop/rotation normalization.
-    
-    This is a separate class from FaceDetector to enforce the three-stage separation:
-      Detection → Alignment → Expression Estimation
-    
-    Usage:
-        aligner = FaceAligner()
-        if aligner.is_available():
-            aligned = aligner.align(frame_bgr, face)  # returns aligned (112x112x3) crop
+    Enabled ONLY when ``INSIGHTFACE_RESEARCH_ONLY=true`` is set in the
+    environment. Model weights are non-commercial (see docs/THIRD_PARTY_LICENSES.md).
+    Do NOT use in production.
     """
-
-    def __init__(self, device: str = "cpu"):
-        self._device = device
-        self._face_alignment = None
-        self._detector_type = "dlib"  # face_alignment uses dlib internally for landmarks
-
-    @property
-    def available(self) -> bool:
-        return self._face_alignment is not None
-
-    @staticmethod
-    def is_available() -> bool:
-        try:
-            import face_alignment  # noqa: F401
-            return True
-        except Exception:
-            return False
-
-    def _ensure_loaded(self):
-        if self._face_alignment is None:
-            try:
-                import face_alignment as fa  # type: ignore
-                self._face_alignment = fa.FaceAlignment(
-                    fa.LandmarksType._2D,  # 2D landmarks only (not full 3D)
-                    device=self._device,
-                    flip_input=False,
-                )
-            except Exception:
-                pass
-
-    def align(self, frame_bgr: np.ndarray, face: FaceBox) -> Optional[np.ndarray]:
-        """Align and crop a detected face to canonical pose.
-
-        Args:
-            frame_bgr: (H, W, 3) uint8 frame.
-            face: Detected face box with landmarks.
-
-        Returns:
-            Aligned face as RGB (112, 112, 3) float32 array ready for EmotiEffLib,
-            or None if alignment fails.
-        """
-        self._ensure_loaded()
-        if not self.available:
-            return None
-
-        try:
-            # Use landmarks if available; otherwise use bbox as a box prompt
-            input_type = "BGR"  # face_alignment accepts both BGR and RGB
-            
-            # Convert to float32 for processing
-            frame_float = frame_bgr.astype(np.float32)
-            
-            # Try using landmarks from detector
-            if face.landmarks:
-                import cv2 as _cv2
-                pts = np.array([[l[0], l[1]] for l in face.landmarks], dtype=np.float32)
-                # face_alignment.estimate_landmarks needs image + bbox
-                preds = self._face_alignment.get_landmarks_from_image(frame_float, return_label_reg=True)
-                if preds is None:
-                    return None
-                landmark_68 = preds[0]  # First detected face
-            else:
-                # Fall back to bbox-only landmark estimation
-                preds = self._face_alignment.get_landmarks_from_image(frame_float, box=(int(face.x1), int(face.y1), int(face.x2), int(face.y2)))
-                if preds is None:
-                    return None
-                landmark_68 = preds[0]
-
-            # Extract face from bbox (margin included)
-            x1 = max(0, int(face.x1))
-            y1 = max(0, int(face.y1))
-            x2 = min(frame_bgr.shape[1], int(face.x2))
-            y2 = min(frame_bgr.shape[0], int(face.y2))
-
-            # Crop and resize to 112x112 (standard for emotion models)
-            cropped = frame_bgr[y1:y2, x1:x2].copy()
-            aligned = _cv2.resize(cropped, (112, 112), interpolation=_cv2.INTER_AREA)
-            
-            # Convert to RGB for model input
-            aligned_rgb = aligned[:, :, ::-1]  # BGR → RGB
-            
-            # Normalize to [0, 1] as expected by most models
-            aligned_rgb = aligned_rgb.astype(np.float32) / 255.0
-            
-            return aligned_rgb
-
-        except Exception:
-            return None
-
-
-# ── Graceful degradation when no detector is available ────────────────────────
-
-def _no_detect(*args, **kwargs):
-    """No-op detect that returns empty list."""
-    return []
-
-
-def _no_crop(*args, **kwargs):
-    """No-op crop that returns None."""
-    return None
-
-
-# Patch in fallback if no detector is available at import time.
-if not FaceDetector.is_available():
-    FaceDetector.detect = _no_detect  # type: ignore
-    FaceDetector.crop_face = _no_crop  # type: ignore
-    FaceDetector.available = False  # type: ignore
+    insightface = _try_insightface_research()
+    if insightface is None:
+        return []
+    try:
+        app = insightface.app.FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+        app.prepare(ctx_id=0, det_size=(640, 640))
+        rgb = frame_bgr[:, :, ::-1].copy() if frame_bgr.ndim == 3 else frame_bgr
+        det = app.get(rgb)
+        faces: list[Face] = []
+        for f in det:
+            bbox = np.asarray(f.bbox, dtype=np.float32).reshape(4)
+            faces.append(Face(bbox=bbox, det_score=float(f.det_score),
+                              landmarks=np.asarray(f.kps, dtype=np.float32) if f.kps is not None else None))
+        faces.sort(key=lambda f: f.det_score, reverse=True)
+        return faces
+    except Exception:  # noqa: S110
+        return []

@@ -1,13 +1,23 @@
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
 Copyright (c) 2026 Deepsim Intelligence Technology Inc.
 
-All rights reserved.
-
-This software and its documentation are proprietary to Deepsim Intelligence 
-Technology Inc. Permission to use, copy, modify, distribute, and sell this 
-software and its documentation for any purpose is hereby prohibited without 
-express written permission from Deepsim Intelligence Technology Inc, provided 
-that the above copyright notice appears in all copies.
-
-THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY 
-AND FITNESS FOR A PARTICULAR PURPOSE.
+The original work (MEE application code in `mee/`, `demo/`, `tools/`, `tests/`)
+is licensed under the Apache License, Version 2.0. All third-party components
+and model weights used by MEE are separately licensed by their respective
+authors — see docs/THIRD_PARTY_LICENSES.md for the full inventory and
+commercial-use status of each component.

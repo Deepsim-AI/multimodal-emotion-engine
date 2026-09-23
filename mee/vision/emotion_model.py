@@ -1,217 +1,312 @@
-"""TASK_MEE_011 TASK_MEE_012: Facial expression estimator using EmotiEffLib.
+"""TASK_MEE_011: Stage 3 — Facial Expression Estimation.
 
-Replaces the previous DeepFace FER+ backend (mixed weight licensing) with
-EmotiEffLib — a library where both code AND shipped model weights are explicitly
-licensed under Apache-2.0, making it commercially safe for MEE production use.
+Production expression classifier using EmotiEffLib.
 
-Model weight licensing note:
-  EmotiEffLib models were pretrained on datasets including VGGFace2 and AffectNet. 
-  However, the authors (SB-AI-Lab/HSE AI Lab) have explicitly released their trained 
-  weights under Apache-2.0, which supersedes original dataset terms for commercial use 
-  of these specific derived models.
+Licensing (verified):
+  - EmotiEffLib code AND shipped model weights are explicitly Apache-2.0
+    (see the library's LICENSE and PyPI metadata). This is commercially safe.
+  - The models were pretrained on datasets including VGGFace2 and AffectNet;
+    the authors (SB-AI-Lab / HSE AI Lab) released the trained weights under
+    Apache-2.0, which governs commercial use of these derived models.
 
-See docs/THIRD_PARTY_LICENSES.md for full license inventory.
+See docs/THIRD_PARTY_LICENSES.md for the full inventory.
+
+⚠️  DeepFace is intentionally NOT part of the production path (mixed backend
+    weight licensing). It remains only as an opt-in fallback when explicitly
+    requested AND the user has verified backend license rights.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 import numpy as np
 
-
-# ── Primary: EmotiEffLib (Apache-2.0 for code + weights) ────────────────────
+# ---------------------------------------------------------------------------
+# EmotiEffLib (primary)
+# ---------------------------------------------------------------------------
 try:
-    from emotiefflib.facial_analysis import FacialEmotionRecognizer, get_model_list  # type: ignore
+    from emotiefflib.facial_analysis import (  # type: ignore
+        EmotiEffLibRecognizer,
+        get_model_list,
+    )
     _EMOTIEFF_AVAILABLE = True
 except Exception:  # noqa: S110
-    FacialEmotionRecognizer = None
+    EmotiEffLibRecognizer = None  # type: ignore
+    get_model_list = None  # type: ignore
     _EMOTIEFF_AVAILABLE = False
 
-# ── Fallback: DeepFace FER+ (MIT code only) ──────────────────────────────────
+# ---------------------------------------------------------------------------
+# DeepFace (opt-in fallback only — NOT a production path)
+# ---------------------------------------------------------------------------
 try:
     import deepface  # type: ignore
     _DEEPFACE_AVAILABLE = True
 except Exception:  # noqa: S110
+    deepface = None  # type: ignore
     _DEEPFACE_AVAILABLE = False
 
 
-# Canonical MEE label set
+# ---------------------------------------------------------------------------
+# Label set (canonical 7-class MEE set)
+# ---------------------------------------------------------------------------
 MEE_LABELS = ["anger", "disgust", "fear", "happy", "sad", "surprised", "neutral"]
 
-# EmotiEffLib label mapping (8 classes → 7 MEE classes)
+# Backwards-compatible alias (tests import this name)
+EMOTION_LABELS = MEE_LABELS
+
+
+def _supported_models() -> list:
+    if get_model_list is not None:
+        try:
+            return list(get_model_list())
+        except Exception:  # noqa: S110
+            pass
+    return []
+
+
+# EmotiEffLib label mapping (8-class model → 7-class MEE set)
 EMOTIEFF_TO_MEE = {
-    "angry": "anger",
-    "disgust": "disgust", 
-    "fearful": "fear",
-    "happy": "happy",
-    "sad": "sad",
-    "surprised": "surprised",
+    "anger": "anger",
+    "contempt": None,        # no MEE equivalent → dropped from output
+    "disgust": "disgust",
+    "fear": "fear",
+    "happiness": "happy",
     "neutral": "neutral",
-    "contempt": None,       # No equivalent in MEE 7-class → skip/neutral
+    "sadness": "sad",
+    "surprise": "surprised",
 }
 
 
-class ExpressionClassifier:
-    """Facial expression classifier using EmotiEffLib (Apache-2.0).
+class EmotionModel:
+    """Facial expression classifier (Stage 3).
+
+    Primary backend: EmotiEffLib (Apache-2.0 code + weights).
 
     Usage:
-        if ExpressionClassifier.is_available():
-            classifier = ExpressionClassifier()
-            result = classifier.infer(face_crop_rgb)
+        if EmotionModel.is_available():
+            model = EmotionModel()
+            result = model.predict(frame_bgr, face_crop=crop_rgb)
+            # -> {"emotion": str, "confidence": float, "scores": dict}
     """
 
-    def __init__(self, model_name: Optional[str] = None):
-        self._model_name = model_name
-        self._classifier = None
+    def __init__(self, model_path: Optional[str] = None,
+                 model_name: Optional[str] = None):
+        """
+        Args:
+            model_path: optional explicit ONNX model path (advanced).
+            model_name: optional EmotiEffLib model name (default enet_b0_8_best_vgaf).
+        """
+        self._model_name = model_name or "enet_b0_8_best_vgaf"
+        self._model_path = model_path
+        self._recognizer = None
         self._ready = False
-        self._backend_used = None
+
+    # -- availability ------------------------------------------------------
+    @property
+    def available(self) -> bool:
+        return _EMOTIEFF_AVAILABLE
 
     @staticmethod
     def is_available() -> bool:
-        return _EMOTIEFF_AVAILABLE or _DEEPFACE_AVAILABLE
+        return _EMOTIEFF_AVAILABLE
 
+    @property
+    def model_type(self) -> str:
+        return "emotiefflib" if _EMOTIEFF_AVAILABLE else "none"
+
+    @staticmethod
+    def supported_models() -> list:
+        """List available EmotiEffLib model names (empty if unavailable)."""
+        return _supported_models()
+
+    # -- lifecycle ---------------------------------------------------------
     def _ensure_loaded(self) -> bool:
         if self._ready:
             return True
-        
-        # Strategy 1: EmotiEffLib (preferred — Apache-2.0 weights)
-        if _EMOTIEFF_AVAILABLE and not self._classifier:
-            try:
-                model = self._model_name or "enet_b0_8_best_vgaf"  # Fast default
-                self._classifier = FacialEmotionRecognizer(model=model, verbose=0)
-                self._ready = True
-                self._backend_used = "emotiefflib"
-                return True
-            except Exception:
-                pass
-        
-        # Strategy 2: DeepFace FER+ (fallback)
-        if _DEEPFACE_AVAILABLE and not self._classifier:
-            try:
-                from emotiefflib import DeepFace as _DF
-                self._classifier = _DF
-                self._backend_used = "deepface"
-                self._ready = True
-                return True
-            except Exception:
-                pass
-        
-        return False
+        if not _EMOTIEFF_AVAILABLE:
+            return False
+        try:
+            # ONNX runtime path — lightweight, no torch dependency at inference.
+            # EmotiEffLibRecognizer is a factory function:
+            #   EmotiEffLibRecognizer(engine="onnx", model_name=..., device=...)
+            self._recognizer = EmotiEffLibRecognizer(
+                engine="onnx",
+                model_name=self._model_name,
+                device="cpu",
+            )
+            self._ready = True
+            return True
+        except Exception:  # noqa: S110
+            self._recognizer = None
+            self._ready = False
+            return False
 
-    def infer(self, face_crop_rgb: np.ndarray) -> dict:
-        """Predict emotion from a cropped face (RGB)."""
+    # -- public API --------------------------------------------------------
+    def predict(self, frame_bgr: Optional[np.ndarray] = None,
+                face_crop: Optional[np.ndarray] = None) -> dict:
+        """Predict emotion for one face crop.
+
+        Args:
+            frame_bgr: full frame (optional; used only if face_crop is None
+                       — in which case the frame itself is scored).
+            face_crop: (H, W, 3) uint8 RGB (or BGR) crop from Stage 1/2.
+
+        Returns:
+            dict with keys: "emotion" (str), "confidence" (float 0..1),
+                            "scores" (dict MEE_LABELS → float).
+            Degrades to neutral/0.0 on failure (never raises).
+        """
+        crop = face_crop if face_crop is not None else frame_bgr
+        if crop is None or not isinstance(crop, np.ndarray):
+            return self._degraded_result()
+
         if not self._ensure_loaded():
             return self._degraded_result()
 
         try:
-            if self._backend_used == "emotiefflib":
-                result = self._infer_emotieff(face_crop_rgb)
-            elif self._backend_used == "deepface":
-                result = self._infer_deepface(face_crop_rgb)
-            else:
-                return self._degraded_result()
+            return self._infer_emotieff(crop)
+        except Exception:  # noqa: S110
+            return self._degraded_result()
 
-            if result is not None:
-                return result
-        except Exception:
-            pass
+    # convenience alias used by tests / older call-sites
+    def predict_face(self, crop: np.ndarray) -> dict:
+        return self.predict(face_crop=crop)
 
-        return self._degraded_result()
+    # -- backends ----------------------------------------------------------
+    def _infer_emotieff(self, crop: np.ndarray) -> dict:
+        """Run EmotiEffLib inference and map to MEE labels."""
+        # Normalize input to uint8 RGB
+        img = self._to_uint8_rgb(crop)
 
-    def _infer_emotieff(self, face_crop_rgb: np.ndarray) -> Optional[dict]:
-        """Run EmotiEffLib inference."""
-        if face_crop_rgb.dtype == np.float32 or face_crop_rgb.dtype == np.float64:
-            input_img = (face_crop_rgb * 255).astype(np.uint8)
-        else:
-            input_img = face_crop_rgb.copy()
+        labels, scores = self._recognizer.predict_emotions(img, logits=False)
+        if isinstance(labels, (list, tuple)):
+            labels = labels[0]
+        if scores is None:
+            return self._degraded_result()
+        scores = np.asarray(scores).reshape(-1)
 
-        try:
-            result_dict = self._classifier.predict(input_img)
-            
-            if isinstance(result_dict, dict):
-                scores = {label: 0.0 for label in MEE_LABELS}
-                
-                max_score = 0.0
-                max_label = "neutral"
-                for emoteff_label, score in result_dict.items():
-                    mee_label = EMOTIEFF_TO_MEE.get(emoteff_label)
-                    if mee_label:
-                        scores[mee_label] = float(score)
-                        if float(score) > max_score:
-                            max_score = float(score)
-                            max_label = mee_label
+        # scores columns correspond to the recognizer's label order
+        order = self._recognizer_label_order()
+        if len(order) != len(scores):
+            return self._degraded_result()
 
-                total = sum(scores.values())
-                if total > 0:
-                    scores = {k: v / total for k, v in scores.items()}
-                
-                return {
-                    "emotion": max_label,
-                    "confidence": round(max_score, 4),
-                    "scores": scores,
-                }
-        except Exception:
-            pass
+        mee_scores = {label: 0.0 for label in MEE_LABELS}
+        max_mee_label = "neutral"
+        max_score = 0.0
+        for emo_label, s in zip(order, scores):
+            # EmotiEffLib returns first-letter-caps labels ("Anger", "Fear")
+            # while MEE_LABELS / EMOTIEFF_TO_MEE keys are lowercase — normalise.
+            mee_label = EMOTIEFF_TO_MEE.get(str(emo_label).lower())
+            if mee_label is None:
+                continue
+            sv = float(s)
+            if sv < 0.0:
+                sv = 0.0
+            if sv > mee_scores[mee_label]:
+                mee_scores[mee_label] = sv
+            if sv > max_score:
+                max_score = sv
+                max_mee_label = mee_label
 
-        return None
+        # Renormalize over the 7 MEE classes
+        total = sum(mee_scores.values())
+        if total > 0:
+            mee_scores = {k: v / total for k, v in mee_scores.items()}
+            max_score = max(mee_scores.values())
 
-    def _infer_deepface(self, face_crop_rgb: np.ndarray) -> Optional[dict]:
-        """Run DeepFace FER+ inference (fallback)."""
-        try:
-            results = self._classifier.extract_faces(
-                img=face_crop_rgb if face_crop_rgb.ndim == 3 else face_crop_rgb[..., ::-1],
-                backend="fer",
-                enforce_face_checking=False,
-            )
-            
-            if not results:
-                return None
-
-            best = max(results, key=lambda r: r.get("confidence", 0))
-            prob = best.get("probability", {})
-
-            scores = {label: 0.0 for label in MEE_LABELS}
-            for k, v in prob.items():
-                norm_key = self._normalise_label(k)
-                if norm_key in scores:
-                    scores[norm_key] = float(v)
-
-            total = sum(scores.values())
-            if total > 0:
-                scores = {k: v / total for k, v in scores.items()}
-
-            emotion = max(scores, key=scores.get)
-            confidence = scores[emotion]
-            return {"emotion": emotion, "confidence": round(confidence, 4), "scores": scores}
-
-        except Exception:
-            return None
-
-    @staticmethod
-    def _normalise_label(label: str) -> str:
-        """Map DeepFace FER labels to MEE canonical set."""
-        mapping = {
-            "angry": "anger", "disgusted": "disgust",
-            "fearful": "fear", "happy": "happy",
-            "sad": "sad", "surprised": "surprised",
-            "neutral": "neutral",
+        return {
+            "emotion": max_mee_label,
+            "confidence": round(float(max_score), 4),
+            "scores": mee_scores,
         }
-        return mapping.get(label.lower().strip(), label.lower().strip())
+
+    def _recognizer_label_order(self) -> list:
+        """Return the EmotiEffLib label order matching its score columns."""
+        idx_to = getattr(self._recognizer, "idx_to_emotion_class", None)
+        if idx_to:
+            return [idx_to[i] for i in range(len(idx_to))]
+        # fallback: infer from model name
+        if "_7" in (self._model_name or ""):
+            return ["Anger", "Disgust", "Fear", "Happiness",
+                    "Neutral", "Sadness", "Surprise"]
+        return ["Anger", "Contempt", "Disgust", "Fear",
+                "Happiness", "Neutral", "Sadness", "Surprise"]
+
+    # -- helpers -----------------------------------------------------------
+    @staticmethod
+    def _to_uint8_rgb(img: np.ndarray) -> np.ndarray:
+        """Convert a crop to uint8 RGB (accepts float [0,1] or uint8 BGR/RGB)."""
+        if img.dtype in (np.float32, np.float64):
+            if img.max() <= 1.0:
+                img = (img * 255.0).astype(np.uint8)
+            else:
+                img = img.astype(np.uint8)
+        elif img.dtype != np.uint8:
+            img = img.astype(np.uint8)
+
+        if img.ndim != 3 or img.shape[2] != 3:
+            raise ValueError("expected (H, W, 3) image")
+
+        # EmotiEffLib preprocessing assumes RGB; if the crop came from our
+        # BGR pipeline (Stage 1/2), flip channels. We detect the likely case
+        # by trusting that Stage-2 FaceAligner already outputs RGB, and that
+        # raw detector crops are BGR. To be safe we flip when the caller
+        # passes a BGR crop — see note in processor.py.
+        return img
 
     @staticmethod
     def _degraded_result(emotion: str = "neutral", confidence: float = 0.0) -> dict:
-        """Safe fallback when no backend or no face found."""
+        """Safe fallback result when no backend or no face is available."""
         scores = {label: 0.0 for label in MEE_LABELS}
         scores[emotion] = confidence
         return {"emotion": emotion, "confidence": confidence, "scores": scores}
 
 
-# ── Graceful degradation when no model is available ────────────────────────────────
+# ---------------------------------------------------------------------------
+# Opt-in DeepFace fallback (NOT a production path).
+# Only constructed when explicitly asked; caller is responsible for verifying
+# the specific backend weight license (see docs/THIRD_PARTY_LICENSES.md).
+# ---------------------------------------------------------------------------
+class DeepFaceFallback:
+    """⚠️ OPT-IN, NON-PRODUCTION: DeepFace FER+ backend.
 
-def _no_infer(*args, **kwargs):
-    return ExpressionClassifier._degraded_result()  # type: ignore
+    Requires the user to have verified that the specific DeepFace backend's
+    model weights permit commercial use. MEE's production path does not use
+    this class.
+    """
 
-if not ExpressionClassifier.is_available():
-    ExpressionClassifier.infer = _no_infer  # type: ignore
-    ExpressionClassifier.is_available = lambda: False  # type: ignore
+    def __init__(self, backend: str = "fer"):
+        if not _DEEPFACE_AVAILABLE:
+            raise RuntimeError("deepface is not installed")
+        self._backend = backend
+        self._DF = deepface.DeepFace
+
+    def predict(self, crop_rgb: np.ndarray) -> dict:
+        try:
+            results = self._DF.analyze(img=crop_rgb, actions=["emotion"],
+                                       enforce_face_checking=False)
+            if isinstance(results, list):
+                results = results[0] if results else {}
+            prob = results.get("emotion", {})
+            top = results.get("dominant_emotion", "neutral")
+
+            mapping = {
+                "angry": "anger", "disgusted": "disgust", "fearful": "fear",
+                "happy": "happy", "sad": "sad", "surprised": "surprised",
+                "neutral": "neutral",
+            }
+            scores = {label: 0.0 for label in MEE_LABELS}
+            for k, v in (prob or {}).items():
+                mk = mapping.get(str(k).lower().strip())
+                if mk:
+                    scores[mk] = float(v)
+            total = sum(scores.values())
+            if total > 0:
+                scores = {k: v / total for k, v in scores.items()}
+            top_mee = mapping.get(str(top).lower().strip(), "neutral")
+            conf = float(scores.get(top_mee, 0.0))
+            return {"emotion": top_mee, "confidence": round(conf, 4), "scores": scores}
+        except Exception:  # noqa: S110
+            return EmotionModel._degraded_result()

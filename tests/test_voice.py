@@ -115,13 +115,17 @@ class TestVoiceProcessor(unittest.TestCase):
     
     def test_process_audio_chunk_alias(self):
         from mee.voice.processor import VoiceProcessor
+        from unittest.mock import patch, MagicMock
         
         vp = VoiceProcessor()
-        # process_audio_chunk requires sounddevice; just verify it doesn't crash on import
-        # Actually, call the method which will return None if no mic
-        result = vp.process_audio_chunk(duration_seconds=0.1)
-        # Returns None when mic unavailable — that's fine
-        self.assertIsNone(result)
+        # Mock the mic to return None (no mic available) so the test is
+        # deterministic and doesn't block on a real audio device.
+        with patch('mee.voice.recorder.MicRecorder') as mock_cls:
+            mock_mic = mock_cls.return_value
+            mock_mic.record_chunk.return_value = None
+            result = vp.process_audio_chunk(duration_seconds=0.1)
+            self.assertIsNone(result)
+            mock_mic.record_chunk.assert_called_once_with(seconds=0.1)
 
 
 class TestVoiceProcessorNoAudio(unittest.TestCase):
