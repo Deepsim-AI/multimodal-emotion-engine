@@ -17,6 +17,8 @@
 | MEE_008 | Emotion Demonstration UI (Streamlit) | ✅ G4 Approved | 2026-09-22 |
 | MEE_009 | End-to-End Validation | ✅ G4 Approved | 2026-09-21 |
 | MEE_011 | Packaging & model license remediation | ✅ G4 Approved | 2026-09-23 |
+| MEE_012 | Vision performance benchmarking (Jetson) | ✅ G3 Results ready; G4 review in progress | 2026-09-23 |
+| MEE_013 | Detection frequency decoupling (`detect_every_n_frames`) | ✅ G4 Approved — G5 closeout complete | 2026-09-23 |
 
 ---
 
@@ -29,7 +31,7 @@
 | Phase 2B | Voice Subsystem | ✅ Complete | MEE_003, MEE_005 |
 | Phase 3 | Multimodal Fusion | ✅ Complete | MEE_006 |
 | **Phase 5** | **End-to-End Validation** | **✅ Complete** | **MEE_009** |
-| **Phase 5b** | **Edge Optimization (Jetson)** | **🔄 In Progress** | **MEE_010** |
+| **Phase 5b** | **Edge Optimization (Jetson)** | **🔄 In Progress** | **MEE_010, MEE_012, MEE_013** |
 
 ## Current Focus
 

@@ -30,6 +30,7 @@ class MEEConfig:
     trend_min_samples: int = 5
     vision_model_path: Optional[str] = None
     face_confidence_threshold: float = 0.7
+    detect_every_n_frames: Optional[int] = None  # TASK_MEE_013 Task 2: 1=every pass (default); n>1 reuses detection for n passes
     voice_model_path: Optional[str] = None
     audio_sample_rate: int = 16000
     output_format: str = "json"
@@ -100,6 +101,8 @@ class EmotionEngine:
                 self._vision_processor = VisionProcessor(
                     model_path=self.config.vision_model_path,
                     confidence_threshold=self.config.face_confidence_threshold,
+                    # TASK_MEE_013 Task 2: thread detection-frequency knob (G4 R2)
+                    detect_every_n_frames=self.config.detect_every_n_frames or 1,
                 )
             except Exception:
                 self._vision_processor = None  # graceful degradation

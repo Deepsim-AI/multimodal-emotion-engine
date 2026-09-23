@@ -253,6 +253,234 @@ def test_processor_multiple_faces():
 
 
 # ---------------------------------------------------------------------------
+# TASK_MEE_013: detection-frequency knob (detect_every_n_frames)
+# ---------------------------------------------------------------------------
+
+class CountingFaceDetector:
+    """Stub detector that counts detect() invocations."""
+
+    def __init__(self):
+        self.available = True
+        self.model_type = "counting-fake"
+        self.detect_calls = 0
+
+    def detect(self, frame_bgr):
+        self.detect_calls += 1
+        h, w = frame_bgr.shape[:2]
+        x1 = w * 0.35
+        y1 = h * 0.25
+        x2 = w * 0.65
+        y2 = h * 0.75
+        return [Face(bbox=np.array([x1, y1, x2, y2]), det_score=0.92)]
+
+    def crop_face(self, frame_bgr, face):
+        h, w = frame_bgr.shape[:2]
+        x1 = int(face.bbox[0]); y1 = int(face.bbox[1])
+        x2 = int(face.bbox[2]); y2 = int(face.bbox[3])
+        return frame_bgr[y1:y2, x1:x2]
+
+
+class CountingNoFaceDetector:
+    """Stub detector returning no faces; counts detect() invocations."""
+
+    def __init__(self):
+        self.available = True
+        self.model_type = "counting-noface"
+        self.detect_calls = 0
+
+    def detect(self, frame_bgr):
+        self.detect_calls += 1
+        return []
+
+    def crop_face(self, frame_bgr, face):
+        return None
+
+
+class CountingEmotionModel:
+    """Stub emotion model that counts predict() invocations."""
+
+    def __init__(self):
+        self.available = True
+        self.model_type = "counting-fer"
+        self.predict_calls = 0
+
+    def predict(self, frame_bgr, face_crop=None):
+        self.predict_calls += 1
+        scores = {l: 0.0 for l in EMOTION_LABELS}
+        scores["happy"] = 0.95
+        return {"emotion": "happy", "confidence": 0.95, "scores": scores}
+
+
+class SwitchingDetector:
+    """Detector whose result depends on frame content: face when sum>0 else none."""
+
+    def __init__(self):
+        self.available = True
+        self.model_type = "switching-fake"
+        self.detect_calls = 0
+
+    def detect(self, frame_bgr):
+        self.detect_calls += 1
+        if int(np.sum(frame_bgr)) > 0:  # non-zero frame => face
+            h, w = frame_bgr.shape[:2]
+            x1 = w * 0.35
+            y1 = h * 0.25
+            x2 = w * 0.65
+            y2 = h * 0.75
+            return [Face(bbox=np.array([x1, y1, x2, y2]), det_score=0.92)]
+        return []
+
+    def crop_face(self, frame_bgr, face):
+        x1, y1, x2, y2 = face.bbox.astype(int)
+        return frame_bgr[y1:y2, x1:x2]
+
+
+def test_mee013_default_detection_every_call():
+    """n == 1 (default): detector runs on every process() call."""
+    det = CountingFaceDetector()
+    emo = CountingEmotionModel()
+    vp = VisionProcessor(detector=det, emotion_model=emo)
+    frame = _make_frame()
+
+    for _ in range(5):
+        result = vp.process(frame)
+        assert result.has_face is True
+        assert result.emotion == "happy"
+
+    assert det.detect_calls == 5
+    assert emo.predict_calls == 5
+
+
+def test_mee013_decoupling_n3():
+    """n == 3: 6 process() calls on the same frame => 2 detections, 6 emotion passes,
+    identical outputs across reused calls."""
+    det = CountingFaceDetector()
+    emo = CountingEmotionModel()
+    vp = VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=3)
+    frame = _make_frame()
+
+    results = [vp.process(frame) for _ in range(6)]
+
+    assert det.detect_calls == 2          # calls #1 and #4
+    assert emo.predict_calls == 6         # every pass runs emotion
+    for r in results:
+        assert r.has_face is True
+        assert r.emotion == "happy"
+        assert r.confidence == pytest.approx(0.95, abs=0.01)
+    # Reused results feed Stage 3 exactly as fresh detections: identical output
+    for r in results[1:]:
+        assert r.face_count == results[0].face_count
+        assert r.best_emotion == results[0].best_emotion
+        assert set(r.scores.keys()) == set(results[0].scores.keys())
+
+
+def test_mee013_staleness_frame_identity():
+    """n == 3: different array object invalidates cache — detection re-runs.
+
+    Frame A (non-zero) detects a face; frame B (zeros) is a different array
+    object, so the cached face must NOT be reused: detection re-runs and
+    reports B's no-face state.
+    """
+    det = SwitchingDetector()
+    emo = CountingEmotionModel()
+    vp = VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=3)
+
+    frame_a = _make_frame()  # non-zero => face
+    result_a = vp.process(frame_a)
+    assert result_a.has_face is True
+    assert det.detect_calls == 1
+
+    # call #2 is within the n=3 window but frame B is a different object
+    frame_b = np.zeros((200, 300, 3), dtype=np.uint8)  # zero => no face
+    result_b = vp.process(frame_b)
+    assert det.detect_calls == 2  # stale cache rejected, re-detected
+    assert result_b.has_face is False  # B's true no-face state, not A's cached face
+
+
+def test_mee013_staleness_shape_change():
+    """n == 3: same array object but a different shape view forces re-detection.
+
+    A sub-view of the same array has a different shape; the shape check must
+    trigger re-detection rather than reusing the stale bbox (defensive check)."""
+    det = CountingFaceDetector()
+    emo = CountingEmotionModel()
+    vp = VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=3)
+
+    frame = _make_frame()  # (200, 300, 3)
+    r1 = vp.process(frame)
+    assert r1.has_face is True
+    assert det.detect_calls == 1
+
+    # Same buffer, different shape: (100, 300, 3)
+    view = frame[:100, :, :]  # type: ignore[assignment]
+    r2 = vp.process(view)
+    assert det.detect_calls == 2  # shape change forced re-detection
+    assert r2.has_face is True
+
+
+def test_mee013_noface_state_cached():
+    """n == 2: no-face state is cached and reused for the next call
+    (cheap no-face result) until a changed frame re-triggers detection (G4 R3)."""
+    det = CountingNoFaceDetector()
+    emo = CountingEmotionModel()
+    vp = VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=2)
+    frame = _make_frame()
+
+    r1 = vp.process(frame)
+    assert r1.has_face is False
+    assert det.detect_calls == 1
+
+    # same frame, call #2 within window: cached no-face reused
+    r2 = vp.process(frame)
+    assert r2.has_face is False
+    assert det.detect_calls == 1
+    assert emo.predict_calls == 0  # no faces => no emotion pass either way
+
+    # call #3 due for detection again
+    r3 = vp.process(frame)
+    assert r3.has_face is False
+    assert det.detect_calls == 2
+
+
+def test_mee013_force_detection():
+    """force_detection=True bypasses the cache and re-runs detection."""
+    det = CountingFaceDetector()
+    emo = CountingEmotionModel()
+    vp = VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=3)
+    frame = _make_frame()
+
+    vp.process(frame)
+    assert det.detect_calls == 1
+
+    vp.process(frame)  # normally cached (call #2)
+    assert det.detect_calls == 1
+
+    vp.process(frame, force_detection=True)  # forced re-detection
+    assert det.detect_calls == 2
+
+
+def test_mee013_validation():
+    """detect_every_n_frames < 1 raises ValueError (no silent clamp)."""
+    det = CountingFaceDetector()
+    emo = CountingEmotionModel()
+    with pytest.raises(ValueError):
+        VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=0)
+    with pytest.raises(ValueError):
+        VisionProcessor(detector=det, emotion_model=emo, detect_every_n_frames=-1)
+
+
+def test_mee013_engine_config_field():
+    """MEEConfig exposes detect_every_n_frames with default None (= 1 pass behavior)."""
+    from mee.api.engine import MEEConfig
+
+    cfg = MEEConfig()
+    assert cfg.detect_every_n_frames is None  # default unset -> engine passes 1
+
+    cfg2 = MEEConfig(detect_every_n_frames=4)
+    assert cfg2.detect_every_n_frames == 4
+
+
+# ---------------------------------------------------------------------------
 # TASK_MEE_010: Jetson GPU-specific tests
 # ---------------------------------------------------------------------------
 

@@ -59,6 +59,25 @@ result = engine.process(video_frame=frame, audio=audio_array)
 # result["overall"]["emotion"], result["trend"]
 ```
 
+### Detection frequency (TASK_MEE_013)
+On CPU-only hosts (e.g. Jetson Orin without a detection GPU path), face detection
+is the dominant cost (~1 s/face vs ~50 ms for emotion). Set
+`detect_every_n_frames` to run detection once every N vision passes and reuse
+its result (bounding box + landmarks) for alignment and emotion on the
+intermediate passes:
+
+```python
+engine = EmotionEngine(MEEConfig(
+    detect_every_n_frames=4,  # detect on pass 1, reuse on passes 2-4, re-detect on 5
+))
+```
+
+- `1` (default) is fully backward-compatible: detection runs on every pass.
+- The cached result is automatically invalidated when the frame's array object
+  or shape changes, and `VisionProcessor.process(frame, force_detection=True)`
+  forces an immediate re-detection.
+- Not thread-safe: use one `VisionProcessor` per thread (or `n=1`).
+
 ### Headless JSON output for evaluation
 ```bash
 python -m demo.emotion_demo --headless  # Outputs JSON results

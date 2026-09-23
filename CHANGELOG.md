@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+**Detection Frequency Decoupling (TASK_MEE_013):**
+- `detect_every_n_frames` knob in `VisionProcessor` (`mee/vision/processor.py`) and `MEEConfig` (`mee/api/engine.py`)
+- Decouples Stage-1 face-detection frequency from emotion-pass frequency: detection runs once and its result (bbox + landmarks) is reused for the next `n-1` passes, then re-detected
+- Default `1` preserves original per-call detection behavior exactly (backward compatible)
+- Cache invalidated by frame identity/shape change; `force_detection=True` bypasses cache
+- Addresses the TASK_MEE_012 finding that CPU-only retina-face detection (~1 s/face) gated end-to-end throughput
+- 8 new focused tests + existing suite green (20 passed, 2 skipped)
+
+### Notes
+
+- MEE_013 is an orchestration-layer optimization only; no changes to `deepefflib`/emotion model, alignment, or detector backends (G1 gate freeze respected)
+
 ## [v0.1.0] — 2026-09-23
 
 ### Added
