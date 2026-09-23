@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.env/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Large model files - do not commit (regenerate with tools/export_models.py)
+models/*.pth
+models/*.pt
+models/safetensors/
+wav2vec2_checkpoints/
+
+# Binary data (ONNX data splits, too large for git)
+*.onnx.data
+
+# Benchmark results (regeneratable)
+benchmarks/bench_results.json
+stability/stability_results.json

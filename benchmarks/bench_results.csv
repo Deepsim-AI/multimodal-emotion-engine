@@ -1,0 +1,6 @@
+component,mean_ms,std_ms,n
+vision,0.01,0.0,10
+voice,240.53,7.02,10
+fusion,0.06,0.0,10
+trend,0.02,0.0,10
+e2e,248.75,12.43,10
