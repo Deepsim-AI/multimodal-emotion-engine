@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<!--
+TASK_MEE_014 Subtask 2: MEE Remote Browser Demo Client
+Single self-contained file — no build tools, no frameworks.
+
+Protocol (must stay in sync with mee/remotedemo/server.py):
+  client -> server (JSON text):
+    {"type":"auth","token":"<hex>"}
+    {"type":"frame","data":"<base64-jpeg>"}
+    {"type":"audio","data":"<base64-f32le>"}
+    {"type":"stop"}
+    {"type":"ping"}
+  server -> client:
+    {"type":"auth_ok","protocol":"mee-remotedemo-v1"}
+    {"type":"result","source":"frame|audio","server_ts":..., "data":{face,voice,overall,trend,latency_ms}}
+    {"type":"pong","ts":...}
+    {"type":"stopped"}
+    {"type":"error","code":"...","message":"..."}
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MEE Remote Demo</title>
+<style>
+:root {
+  --bg: #0f1419;
+  --panel: #1a2129;
+  --panel-2: #212a35;
+  --text: #e8edf2;
+  --muted: #9aa7b4;
+  --accent: #4fc3f7;
+  --ok: #4caf50;
+  --warn: #ffb300;
+  --err: #ef5350;
+  --bar-bg: #2c3845;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 16px;
+  background: var(--bg); color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+h1 { font-size: 18px; margin: 0 0 12px; }
+h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+.layout { display: grid; grid-template-columns: minmax(320px, 480px) 1fr; gap: 16px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.card {
+  background: var(--panel); border-radius: 10px; padding: 14px;
+  border: 1px solid #2a333f;
+}
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 10px; }
+video#preview {
+  width: 100%; border-radius: 8px; background: #000; aspect-ratio: 4/3; display: block;
+}
+.row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+button {
+  background: var(--panel-2); color: var(--text); border: 1px solid #34404e;
+  border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: #06222f; border-color: var(--accent); font-weight: 600; }
+button.danger { background: #3a2527; border-color: #5a3538; }
+input[type=text], input[type=url] {
+  background: #0b1015; color: var(--text); border: 1px solid #34404e;
+  border-radius: 8px; padding: 8px 10px; font-size: 13px; flex: 1; min-width: 160px;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.dot.err { background: var(--err); box-shadow: 0 0 6px var(--err); }
+.dot.off { background: #4a5561; }
+#connStatus { font-size: 13px; color: var(--muted); }
+#connStatus b { color: var(--text); }
+.status-banner {
+  padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-top: 10px;
+  display: none;
+}
+.status-banner.warn { display: block; background: #3a2f17; border: 1px solid #6b5420; }
+.status-banner.err { display: block; background: #3a2022; border: 1px solid #6b3033; }
+.status-banner.ok { display: block; background: #1c3320; border: 1px solid #2f5a35; }
+.bars { display: grid; gap: 6px; }
+.bar-row { display: grid; grid-template-columns: 90px 1fr 48px; gap: 8px; align-items: center; font-size: 12px; }
+.bar-row .label { color: var(--muted); }
+.bar-track { background: var(--bar-bg); border-radius: 4px; height: 14px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width .18s; }
+.bar-row .pct { text-align: right; font-variant-numeric: tabular-nums; }
+.overall-card {
+  text-align: center; padding: 18px 14px;
+}
+.overall-card .emoji { font-size: 42px; line-height: 1; }
+.overall-card .label { font-size: 22px; font-weight: 700; margin-top: 6px; text-transform: capitalize; }
+.overall-card .conf { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.overall-card .conflict { margin-top: 8px; font-size: 13px; }
+.overall-card .conflict.agree { color: var(--ok); }
+.overall-card .conflict.clash { color: var(--warn); }
+.trend-line { margin-top: 8px; font-size: 14px; color: var(--text); }
+.stats {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
+  font-size: 12px; color: var(--muted);
+}
+.stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+.indicators { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+.demo-toggle { font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+.demo-toggle input { margin-right: 4px; }
+footer { margin-top: 14px; font-size: 12px; color: var(--muted); }
+code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>MEE Remote Demo <span class="sub">Multimodal Emotion Engine · browser test client (TASK_MEE_014)</span></h1>
+
+<div class="layout">
+  <!-- LEFT COLUMN: connection + camera -->
+  <div>
+    <div class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <span id="connDot" class="dot off"></span>
+        <span id="connStatus"><b>Disconnected</b> — configure and connect</span>
+      </div>
+      <div class="row">
+        <input type="url" id="serverUrl" placeholder="wss://&lt;host&gt;:8910  (or ws://localhost:8910)" spellcheck="false">
+        <button id="btnConnect">Connect</button>
+        <button id="btnDisconnect" disabled>Disconnect</button>
+      </div>
+      <div class="row">
+        <input type="text" id="token" placeholder="Access token (from server operator)" spellcheck="false">
+      </div>
+      <div class="row">
+        <label class="demo-toggle"><input type="checkbox" id="demoMode"> Demo mode (no backend, fake results)</label>
+      </div>
+      <div id="connBanner" class="status-banner"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Camera</h2>
+      <video id="preview" autoplay playsinline muted></video>
+      <div class="row">
+        <button id="btnStart" class="primary">Start Test</button>
+        <button id="btnStop" class="danger" disabled>Stop Test</button>
+      </div>
+      <div class="row indicators">
+        <span><span id="camDot" class="dot off"></span>Camera</span>
+        <span><span id="micDot" class="dot off"></span>Microphone</span>
+        <span id="fpsLabel">FPS: —</span>
+        <span id="latencyLabel">Latency: —</span>
+      </div>
+      <div id="streamBanner" class="status-banner"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN: results -->
+  <div>
+    <div class="card overall-card">
+      <h2>Fused Affective State</h2>
+      <div id="ovEmoji" class="emoji">😐</div>
+      <div id="ovLabel" class="label">awaiting data</div>
+      <div id="ovConf" class="conf">—</div>
+      <div id="ovConflict" class="conflict">—</div>
+      <div id="trend" class="trend-line">trend: —</div>
+      <div class="stats">
+        <span>latency (last): <b id="stLast">—</b></span>
+        <span>avg: <b id="stAvg">—</b></span>
+        <span>min: <b id="stMin">—</b></span>
+        <span>max: <b id="stMax">—</b></span>
+        <span>results: <b id="stCount">0</b></span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+      <div class="card">
+        <h2>Facial Expression</h2>
+        <div id="faceBars" class="bars"></div>
+        <div id="faceMeta" style="margin-top:10px;font-size:12px;color:var(--muted)">no face data</div>
+      </div>
+      <div class="card">
+        <h2>Voice Emotion</h2>
+        <div id="voiceBars" class="bars"></div>
+        <div id="voiceMeta" style="margin-top:10px;font-size:12px;color:var(--muted)">no voice data</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  MEE Remote Demo — prototype. Results are computed on the operator's Jetson;
+  this page only streams camera/mic and renders JSON. No local model runs.
+</footer>
+
+<script>
+"use strict";
+// ============================================================================
+// TASK_MEE_014 browser client
+// ============================================================================
+const EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprised", "neutral"];
+const EMOJI = {
+  angry: "😠", disgust: "🤢", fear: "😨", happy: "🙂",
+  sad: "😢", surprised: "😲", neutral: "😐",
+};
+const TREND = {
+  stable: "➖ stable",
+  improving: "📈 improving",
+  declining: "📉 declining",
+  unstable: "🌪 unstable",
+};
+
+const $ = (id) => document.getElementById(id);
+
+let ws = null;
+let stream = null;
+let captureTimer = null;
+let audioCtx = null;
+let audioNode = null;
+let audioTimer = null;
+let demoTimer = null;
+let running = false;
+let latencyWindow = [];
+let lastResultCount = 0;
+let lastFps = 0;
+
+// ---------- UI helpers ------------------------------------------------------
+
+function setConn(state, label) {
+  const dot = $("connDot");
+  dot.className = "dot " + state;
+  $("connStatus").innerHTML = "<b>" + label + "</b>";
+}
+function setBanner(el, cls, text) {
+  el.className = "status-banner " + cls;
+  el.textContent = text;
+}
+function clearBanner(el) { el.className = "status-banner"; el.textContent = ""; }
+
+function renderBars(containerId, scores, metaEl, metaText) {
+  const container = $(containerId);
+  container.innerHTML = "";
+  const entries = Object.entries(scores || {});
+  for (const label of EMOTIONS) {
+    const v = (scores && typeof scores === "object") ? (scores[label] ?? 0) : 0;
+    const pct = Math.max(0, Math.min(1, Number(v) || 0));
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML =
+      '<span class="label">' + label + '</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + (pct * 100).toFixed(1) + '%"></span></span>' +
+      '<span class="pct">' + (pct * 100).toFixed(0) + '%</span>';
+    container.appendChild(row);
+  }
+  if (metaEl) metaEl.textContent = metaText || "";
+}
+
+function renderResult(data, source) {
+  const overall = data.overall || {};
+  $("ovEmoji").textContent = EMOJI[overall.emotion] || "😐";
+  $("ovLabel").textContent = overall.emotion || "unknown";
+  const conf = overall.confidence != null ? Math.round(overall.confidence * 100) + "%" : "—";
+  $("ovConf").textContent = "confidence " + conf;
+  const conflictEl = $("ovConflict");
+  if (overall.conflict) {
+    conflictEl.className = "conflict clash";
+    conflictEl.textContent = "⚠ multimodal conflict detected";
+  } else {
+    conflictEl.className = "conflict agree";
+    conflictEl.textContent = "✓ channels agree";
+  }
+  const trend = data.trend || "stable";
+  $("trend").textContent = "trend: " + (TREND[trend] || trend);
+
+  const face = data.face || {};
+  renderBars("faceBars", face.scores, "faceMeta",
+    face.has_face
+      ? "detected · " + (face.emotion || "—") + " · " + Math.round((face.confidence || 0) * 100) + "%"
+      : "no face detected");
+
+  let voiceMeta = "no voice data";
+  if (data.voice) {
+    voiceMeta = (data.voice.emotion || "—") + " · " + Math.round((data.voice.confidence || 0) * 100) + "%";
+  }
+  renderBars("voiceBars", (data.voice && data.voice.scores) || {}, "voiceMeta", voiceMeta);
+
+  const lat = data.latency_ms;
+  if (typeof lat === "number") {
+    latencyWindow.push(lat);
+    if (latencyWindow.length > 200) latencyWindow.shift();
+    $("stLast").textContent = lat.toFixed(0) + " ms";
+    const avg = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
+    $("stAvg").textContent = avg.toFixed(0) + " ms";
+    $("stMin").textContent = Math.min(...latencyWindow).toFixed(0) + " ms";
+    $("stMax").textContent = Math.max(...latencyWindow).toFixed(0) + " ms";
+  }
+  $("stCount").textContent = String(++lastResultCount);
+  $("latencyLabel").textContent = "Latency: " + (typeof lat === "number" ? lat.toFixed(0) + " ms" : "—");
+}
+
+// ---------- WebSocket -------------------------------------------------------
+
+function wsUrlFromInput() {
+  let u = $("serverUrl").value.trim();
+  if (!u) return null;
+  if (!/^wss?:\/\//.test(u)) {
+    // Accept https/http host form and upgrade.
+    if (u.startsWith("https://")) u = "wss://" + u.slice(8);
+    else if (u.startsWith("http://")) u = "ws://" + u.slice(7);
+    else u = "ws://" + u;
+  }
+  return u;
+}
+
+function connect() {
+  if (running) return;
+  const url = wsUrlFromInput();
+  const token = $("token").value.trim();
+  if (!url) { setBanner($("connBanner"), "err", "Enter a server URL first."); return; }
+  if (!token) { setBanner($("connBanner"), "err", "Enter the access token first."); return; }
+  clearBanner($("connBanner"));
+  setConn("warn", "Connecting…");
+  try { ws = new WebSocket(url); }
+  catch (e) { setConn("err", "Invalid URL"); setBanner($("connBanner"), "err", String(e)); return; }
+  const t0 = Date.now();
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "auth", token }));
+  };
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type === "auth_ok") {
+      setConn("ok", "Connected");
+      clearBanner($("connBanner"));
+    } else if (msg.type === "result") {
+      renderResult(msg.data || {}, msg.source);
+    } else if (msg.type === "error") {
+      setConn("warn", "Connected — server error");
+      setBanner($("connBanner"), "warn", msg.code + ": " + msg.message);
+      if (msg.code === "bad_token" || msg.code === "bad_auth") {
+        setConn("err", "Auth failed");
+        stopAll(true);
+      }
+    } else if (msg.type === "pong") {
+      // no-op (liveness only)
+    }
+  };
+  ws.onerror = () => { /* onclose will fire */ };
+  ws.onclose = (ev) => {
+    setConn("err", "Disconnected (code " + ev.code + ")");
+    setBanner($("connBanner"), "err", "Connection closed. Check URL/token and reconnect.");
+    stopAll(true);
+  };
+}
+
+function disconnect() {
+  if (ws) {
+    try { ws.close(1000, "user disconnect"); } catch {}
+    ws = null;
+  }
+  stopAll(true);
+  setConn("off", "Disconnected");
+}
+
+// ---------- camera + mic ----------------------------------------------------
+
+async function startStream() {
+  if (running) return;
+  if ($("demoMode").checked) { startDemoMode(); return; }
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    setBanner($("streamBanner"), "err", "Connect to the server before starting.");
+    return;
+  }
+  clearBanner($("streamBanner"));
+  let videoOk = false, audioOk = false;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: { sampleRate: 16000, echoCancellation: true },
+    });
+  } catch (e) {
+    setBanner($("streamBanner"), "err", "Permission denied or no devices: " + e.name);
+    return;
+  }
+  // Video preview
+  const video = $("preview");
+  video.srcObject = stream;
+  for (const track of stream.getVideoTracks()) {
+    $("camDot").className = "dot ok";
+  }
+  // Start capture loops
+  running = true;
+  $("btnStart").disabled = true;
+  $("btnStop").disabled = false;
+  startCaptureLoop();
+  startAudioLoop();
+  for (const track of stream.getAudioTracks()) {
+    $("micDot").className = "dot ok";
+  }
+  setBanner($("streamBanner"), "ok", "Streaming camera + microphone to MEE.");
+}
+
+function stopStream() {
+  running = false;
+  $("btnStart").disabled = false;
+  $("btnStop").disabled = true;
+  $("camDot").className = "dot off";
+  $("micDot").className = "dot off";
+  stopLoops();
+  if (stream) {
+    for (const t of stream.getTracks()) t.stop();
+    stream = null;
+  }
+  $("preview").srcObject = null;
+  $("fpsLabel").textContent = "FPS: —";
+}
+
+function stopLoops() {
+  if (captureTimer) { clearInterval(captureTimer); captureTimer = null; }
+  if (audioTimer) { clearInterval(audioTimer); audioTimer = null; }
+  if (audioNode) { try { audioNode.disconnect(); } catch {} audioNode = null; }
+  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+}
+
+function stopAll(silent) {
+  stopStream();
+  if (!silent) setBanner($("streamBanner"), "", "");
+}
+
+// ---------- capture loops ---------------------------------------------------
+
+const _canvas = document.createElement("canvas");
+_canvas.width = 640; _canvas.height = 480;
+const _ctx = _canvas.getContext("2d");
+
+function startCaptureLoop() {
+  captureTimer = setInterval(() => {
+    if (!stream) return;
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack || videoTrack.readyState !== "live") return;
+    const video = $("preview");
+    if (video.readyState < 2) return;
+    try {
+      _ctx.drawImage(video, 0, 0, _canvas.width, _canvas.height);
+      _canvas.toBlob((blob) => {
+        if (!blob || !ws || ws.readyState !== WebSocket.OPEN) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const b64 = String(reader.result).split(",")[1];
+          ws.send(JSON.stringify({ type: "frame", data: b64 }));
+        };
+        reader.readAsDataURL(blob, "image/jpeg", 0.7);
+      }, "image/jpeg", 0.7);
+    } catch (e) { /* frame failed — ignore */ }
+  }, 67); // ~15 FPS
+  const fpsTick = setInterval(() => { lastFps++; }, 1000);
+  setInterval(() => { $("fpsLabel").textContent = "FPS: " + lastFps; lastFps = 0; }, 1000);
+}
+
+function startAudioLoop() {
+  // Use AudioContext + ScriptProcessor (deprecated but universal) to
+  // capture raw PCM samples and stream them as base64 float32 chunks.
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  } catch {
+    audioCtx = new AudioContext();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const src = audioCtx.createMediaStreamSource(stream);
+  const bufSize = 1024;
+  const proc = audioCtx.createScriptProcessor(bufSize, 1, 1);
+  let pending = new Float32Array(0);
+  const CHUNK_SAMPLES = 320; // 20 ms @ 16 kHz
+  proc.onaudioprocess = (ev) => {
+    const inp = ev.inputBuffer.getChannelData(0);
+    // Resample if needed (simple linear interp) — AudioContext may run at 48k.
+    const ratio = audioCtx.sampleRate / 16000;
+    let out;
+    if (ratio === 1) {
+      out = new Float32Array(inp);
+    } else {
+      const n = Math.floor(inp.length / ratio);
+      out = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const x = i * ratio;
+        const i0 = Math.floor(x);
+        const i1 = Math.min(inp.length - 1, i0 + 1);
+        const frac = x - i0;
+        out[i] = inp[i0] * (1 - frac) + inp[i1] * frac;
+      }
+    }
+    // Concatenate to pending and flush complete 320-sample chunks
+    const merged = new Float32Array(pending.length + out.length);
+    merged.set(pending, 0);
+    merged.set(out, pending.length);
+    let off = 0;
+    while (merged.length - off >= CHUNK_SAMPLES) {
+      const chunk = merged.slice(off, off + CHUNK_SAMPLES);
+      off += CHUNK_SAMPLES;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const b64 = b64FromArrayBuffer(chunk.buffer);
+        ws.send(JSON.stringify({ type: "audio", data: b64 }));
+      }
+    }
+    pending = merged.slice(off);
+  };
+  src.connect(proc);
+  // Keep the graph alive without an audible destination
+  const sink = audioCtx.createGain();
+  sink.gain.value = 0;
+  proc.connect(sink);
+  sink.connect(audioCtx.destination);
+  audioNode = proc;
+}
+
+function b64FromArrayBuffer(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(bin);
+}
+
+// ---------- demo mode -------------------------------------------------------
+
+function startDemoMode() {
+  running = true;
+  $("btnStart").disabled = true;
+  $("btnStop").disabled = false;
+  setConn("ok", "Demo mode (no backend)");
+  setBanner($("streamBanner"), "ok", "Demo mode — rendering simulated results. No camera or mic used.");
+  setBanner($("connBanner"), "", "");
+  let t = 0;
+  const cycle = [
+    { emotion: "happy", confidence: 0.82 },
+    { emotion: "neutral", confidence: 0.61 },
+    { emotion: "sad", confidence: 0.74 },
+    { emotion: "angry", confidence: 0.58 },
+    { emotion: "surprised", confidence: 0.49 },
+  ];
+  demoTimer = setInterval(() => {
+    const c = cycle[t % cycle.length];
+    t++;
+    const faceScores = {}, voiceScores = {};
+    for (const e of EMOTIONS) { faceScores[e] = 0.02; voiceScores[e] = 0.02; }
+    faceScores[c.emotion] = c.confidence;
+    voiceScores[c.emotion] = Math.max(0.05, c.confidence - 0.15);
+    const conflict = (t % 7 === 0);
+    renderResult({
+      face: { emotion: c.emotion, confidence: c.confidence, scores: faceScores, has_face: true },
+      voice: { emotion: c.emotion, confidence: Math.max(0.05, c.confidence - 0.15), scores: voiceScores },
+      overall: { emotion: c.emotion, confidence: c.confidence * 0.9, conflict },
+      trend: t % 5 === 0 ? "unstable" : (t % 2 === 0 ? "improving" : "stable"),
+      latency_ms: 80 + Math.round(Math.random() * 120),
+    }, "demo");
+  }, 700);
+}
+
+// ---------- wiring ----------------------------------------------------------
+
+$("btnConnect").addEventListener("click", connect);
+$("btnDisconnect").addEventListener("click", disconnect);
+$("btnStart").addEventListener("click", startStream);
+$("btnStop").addEventListener("click", () => {
+  if (demoTimer) { stopAll(false); setBanner($("streamBanner"), "ok", "Demo mode stopped."); return; }
+  stopAll(false);
+  setBanner($("streamBanner"), "ok", "Stopped.");
+});
+window.addEventListener("beforeunload", () => { try { if (ws) ws.close(1000, "page unload"); } catch {} });
+
+// Remember last-used URL + token for convenience (not the token value itself).
+try {
+  const savedUrl = localStorage.getItem("mee_demo_url");
+  if (savedUrl) $("serverUrl").value = savedUrl;
+  $("serverUrl").addEventListener("change", () => {
+    localStorage.setItem("mee_demo_url", $("serverUrl").value.trim());
+  });
+} catch {}
+</script>
+</body>
+</html>
