@@ -22,7 +22,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-**Temporal State Tracking (TASK_MEE_007):**
+**Remote Browser Demo Client (TASK_MEE_014):**
+- `mee/remotedemo/server.py` — WebSocket server (token auth, rate limiting, CORS, audit log)
+- `mee/remotedemo/config.py` — configuration with token auto-generation
+- `mee/remotedemo/index.html` — browser client (live preview, frame/audio streaming, result rendering, Demo Mode)
+- `tests/test_remotedemo_server.py` — 31 unit tests
+- `tests/test_remotedemo_e2e.py` — 4 e2e tests (1 skipped due to pre-existing Jetson constraint)
+- `docs/remotedemo/DEPLOYMENT.md` — deployment guide (Tailscale Funnel + China fallback)
+- `docs/remotedemo/ACCESS.md` — tester procedure for remote users
+- `docs/remotedemo/SECURITY.md` — threat model and IP boundary documentation
+- G5 closure: local commit only — remote push deferred pending user confirmation of target repository/branch
+
+**Temporal State Tracking (TASK_MEE_007):****
 - `mee/state/history.py` — EmotionHistory fixed-window ring buffer
 - `mee/state/estimator.py` — analyze_trend() deterministic classifier
 - Engine integration via _compute_trend() in process() output under "trend" key
