@@ -28,12 +28,19 @@ and a "Fused Affective State" panel on the right.
 
 1. In the **Server URL** field, the URL should already be filled in. If not,
    paste the `wss://` URL your contact provided.
+   - Remote (internet): `wss://jetson-agx.tail0d394d.ts.net/` (no port)
+   - Same Tailscale tailnet: `ws://<jetson-tailscale-ip>:8910`
 2. In the **Access token** field, paste the token (a long hex string).
 3. Click **Connect**.
 
 You should see a green dot next to "Connected" under Connection.
-If you see a red dot with "Auth failed", the token is wrong — double-check
-and retry.
+If you see a red dot with "Auth failed" or "Disconnected (code 1008)",
+the token is wrong — double-check you copied it exactly (no trailing spaces
+or quotes) and retry.
+
+> **Note:** The token does **not** change across server reboots. If your
+> contact says the server restarted, you can reuse the same token — only the
+> connection needs to be re-established.
 
 ### 3. Start the test
 
@@ -74,7 +81,7 @@ Click **Disconnect** to close the WebSocket connection.
 | Camera/mic not detected | Check that no other app is using the device. Restart the browser. |
 | "Permission denied" banner | Click **Allow** in the browser permission prompt. If you accidentally denied, click the lock icon in the address bar and re-enable. |
 | No results after start | Wait a few seconds — the engine is processing. If still nothing, check that you are connected (green dot). |
-| "Connection closed" banner | Reconnect and re-authenticate. The server may have restarted. |
+| "Connection closed" banner | Reconnect and re-authenticate. The server may have restarted. If you see "code 1008" specifically, the token was rejected — verify it matches the value your contact gave you. |
 | Very high latency (> 500 ms) | Check your network connection. High latency may also indicate server load. |
 
 ## What you will NOT see

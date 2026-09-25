@@ -93,6 +93,12 @@ class RemotedemoConfig:
         if self.token_file.exists():
             existing = self.token_file.read_text().strip()
             if existing:
+                # TASK_MEE_014 fix: keep self.token in sync with the on-disk
+                # credential so callers comparing config.token see the same
+                # value this method returns. (Previously this branch returned
+                # without setting self.token, leaving it empty and causing
+                # every auth attempt to fail with "token mismatch".)
+                self.token = existing
                 return existing
         new_val = secrets.token_hex(32)
         if create:

@@ -36,6 +36,9 @@ engine, its models, or the host is ever disclosed.
 
 - **Shared access token** (`secrets.token_hex(32)`), auto-generated on first
   boot and persisted to `~/.config/mee-remotedemo/token` (mode 0600).
+  The token is **stable across server restarts** — the server re-reads the
+  same file on each start. A new token is only produced if the file is
+  deleted (see Rotation).
 - Token is the **first** WebSocket message: `{"type":"auth","token":"***"}`.
   Any other first message is rejected with close code `1008`.
 - Token is **not** in the URL, so it does not leak into browser history,
@@ -43,6 +46,14 @@ engine, its models, or the host is ever disclosed.
 - Wrong/missing token → immediate close, audited.
 - **Rotation**: delete the token file and restart the server to force a new
   token. Share the new token with the tester.
+- **Known bug (fixed)**: an earlier version of `config.py` `resolve_token()`
+  returned the on-disk token without assigning it to `self.token`, so the
+  server compared every incoming token against an empty string and rejected
+  all of them (`token mismatch` / close `1008`). This was fixed by setting
+  `self.token` in the file-read branch and having `server.py` capture the
+  resolved value into `self._active_token` for the comparison. If you ever
+  see `token mismatch` with a *correct* token, check that this fix is
+  present in both `config.py` and `server.py`.
 
 ## Transport security
 

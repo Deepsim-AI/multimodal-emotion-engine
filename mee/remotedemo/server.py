@@ -205,7 +205,10 @@ class RemotedemoServer:
     # -- lifecycle ------------------------------------------------------
 
     async def start(self) -> None:
-        self.config.resolve_token()
+        # TASK_MEE_014 fix: use the resolved token (not the possibly-empty
+        # self.config.token attribute) so auth compares against the same value
+        # that resolve_token() returned.
+        self._active_token = self.config.resolve_token()
         origins = self._cors_origins()
         self._server = await serve(
             self._handle,
@@ -279,7 +282,11 @@ class RemotedemoServer:
             await ws.close(code=1008, reason="bad auth")
             return None
         provided = msg.get("token")
-        if not provided or provided != self.config.token:
+        # TASK_MEE_014 fix: compare against the resolved token. _active_token is
+        # set in start(); the fallback keeps direct/instantiated servers (e.g. in
+        # tests) working even if start() was not run.
+        active_token = getattr(self, "_active_token", None) or self.config.resolve_token()
+        if not provided or provided != active_token:
             self._auditor.record("conn", "auth_failure", "token mismatch")
             await ws.send(json.dumps({
                 "type": "error", "code": "bad_token", "message": "invalid access token"}))
