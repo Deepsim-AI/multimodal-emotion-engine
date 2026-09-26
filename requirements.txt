@@ -4,6 +4,10 @@ onnxruntime>=1.16
 retina-face>=0.0.18
 face-alignment>=1.3
 emotiefflib>=1.1
+# TASK_MEE_016: MediaPipe Face Detection — CPU backend for Jetson AGX Orin
+# (L4T R36.4 driver supports CUDA 12.x; installed PyTorch cu130 build cannot
+# use GPU. MediaPipe 0.10.x ships prebuilt manylinux aarch64 wheels.)
+mediapipe>=0.10.15,<0.11
 
 # Voice pipeline
 speechbrain>=0.5.14

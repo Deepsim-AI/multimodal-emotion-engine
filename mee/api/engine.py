@@ -31,6 +31,7 @@ class MEEConfig:
     vision_model_path: Optional[str] = None
     face_confidence_threshold: float = 0.7
     detect_every_n_frames: Optional[int] = None  # TASK_MEE_013 Task 2: 1=every pass (default); n>1 reuses detection for n passes
+    use_mediapipe: Optional[bool] = None  # TASK_MEE_016 Task C: None=auto (CUDA-driven); True=force MediaPipe CPU; False=force legacy chain
     voice_model_path: Optional[str] = None
     audio_sample_rate: int = 16000
     output_format: str = "json"
@@ -103,6 +104,8 @@ class EmotionEngine:
                     confidence_threshold=self.config.face_confidence_threshold,
                     # TASK_MEE_013 Task 2: thread detection-frequency knob (G4 R2)
                     detect_every_n_frames=self.config.detect_every_n_frames or 1,
+                    # TASK_MEE_016 Task C: thread backend-preference knob
+                    use_mediapipe=self.config.use_mediapipe,
                 )
             except Exception:
                 self._vision_processor = None  # graceful degradation

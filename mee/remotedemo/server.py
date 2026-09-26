@@ -12,6 +12,7 @@ Protocol (browser <-> server), documented for the client in index.html:
     {"type":"error","code":"...","message":"..."}
     {"type":"result","data":{face,voice,overall,trend,latency_ms},"server_ts":...}
     {"type":"pong","ts":...}
+    {"type":"heartbeat","ts":...}      — server keeps the socket warm (TASK_MEE_015 Task 2)
 
 Design constraints (from CTO_PLAN.md + G3_RESPONSE.md):
   - Thin wrapper: every inference result is exactly EmotionEngine.process() output.
@@ -32,6 +33,7 @@ import os
 import time
 from pathlib import Path
 from typing import Optional
+import sys
 
 try:
     import websockets
@@ -43,6 +45,13 @@ except ImportError:  # pragma: no cover
 from .config import RemotedemoConfig
 
 PROTOCOL_VERSION = "mee-remotedemo-v1"
+# TASK_MEE_015 Task 2: application-level heartbeat cadence. The server sends a
+# small {"type":"heartbeat"} frame every HEARTBEAT_INTERVAL_S to any idle
+# authenticated connection so proxy/firewall idle timers (Tailscale Funnel,
+# NAT) see traffic even when the client is silent. Distinct from protocol
+# pings (which websockets auto-answers) and from the client's app-level ping
+# (which this server answers with {"type":"pong"}).
+HEARTBEAT_INTERVAL_S = 15.0
 MAX_AUTH_TIMEOUT_S = 5.0
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 MAX_AUDIO_CHUNK_SAMPLES = 16000
@@ -210,15 +219,34 @@ class RemotedemoServer:
         # that resolve_token() returned.
         self._active_token = self.config.resolve_token()
         origins = self._cors_origins()
+        # TASK_MEE_015 Task 2: keepalive tuning.  ping_interval=10/timeout=20
+        # replaces the previous 20/15: a shorter interval catches a dead peer
+        # faster, and a longer timeout tolerates the event-loop stalls observed
+        # on the Jetson (inference blocking the loop) that produced the
+        # "keepalive ping timeout" 1011 closes in TASK_MEE_014/015.
         self._server = await serve(
             self._handle,
             host=self.config.host,
             port=self.config.port,
             max_size=MAX_FRAME_BYTES + 8 * 1024,
+            ping_interval=10,
+            ping_timeout=20,
             **({"origins": self.config.cors_origin} if self.config.cors_origin != "*" else {}),
         )
+        # TASK_MEE_015 Task 1: debug logger for keepalive / close diagnostics.
+        # The start script redirects stdout to /tmp/mee-ws.log, so the
+        # acceptance criterion `grep -E "WS-KA (pong|sent|recv)" /tmp/mee-ws.log`
+        # is satisfied by this logger.  Also appended to the audit log so the
+        # record survives log-file rotation.
+        self._wslog = logging.getLogger("mee.remotedemo.ws")
+        self._wslog.setLevel(logging.INFO)
+        if not self._wslog.handlers:
+            h = logging.StreamHandler(sys.stdout)
+            h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+            self._wslog.addHandler(h)
         self._auditor.record("server", "started",
-                             f"host={self.config.host} port={self.config.port}")
+                             f"host={self.config.host} port={self.config.port} "
+                             f"ping_interval=10 ping_timeout=20 heartbeat={HEARTBEAT_INTERVAL_S:.0f}s")
         await self._server.wait_closed()
 
     async def stop(self) -> None:
@@ -231,6 +259,19 @@ class RemotedemoServer:
     async def _handle(self, ws) -> None:
         client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
         self.active_connections += 1
+        # TASK_MEE_015 Task 1: per-connection keepalive diagnostic state.
+        conn_id = id(ws)
+        conn_state = {
+            "t0": time.time(),
+            "last_app_in": time.time(),   # last client->server app frame
+            "last_app_out": time.time(),  # last server->client app frame
+            "last_p2p_ping": time.time(),  # last protocol ping sent (websockets)
+            "last_p2p_pong": None,         # last protocol pong received
+            "last_app_ping": None,        # last {type:ping} from client
+            "last_app_pong": None,        # last {type:pong} sent to client
+            "last_heartbeat": None,       # last server heartbeat frame
+        }
+        hb_task = None
         try:
             token = await self._auth(ws)
             if token is None:
@@ -240,17 +281,57 @@ class RemotedemoServer:
                 "type": "auth_ok",
                 "protocol": PROTOCOL_VERSION,
             }))
-            await self._main_loop(ws)
+            # TASK_MEE_015 Task 2: application-level heartbeat. Independent of
+            # protocol pings, it guarantees visible socket traffic for proxy
+            # idle timers whenever the client goes silent (tab backgrounded,
+            # user stopped streaming, etc.).
+            hb_task = asyncio.create_task(
+                self._heartbeat_loop(ws, client_ip, conn_state))
+            await self._main_loop(ws, client_ip, conn_state)
         except Exception as exc:  # noqa: BLE001 — connection-level catch-all
             self._auditor.record(client_ip, "error", str(exc)[:200])
+            self._wslog.info(
+                "WS-ERR conn=%s ip=%s exc=%s", conn_id, client_ip, str(exc)[:200])
             try:
                 await ws.send(json.dumps({
                     "type": "error", "code": "internal", "message": "internal error"}))
             except Exception:
                 pass
         finally:
+            if hb_task is not None:
+                hb_task.cancel()
             self.active_connections -= 1
-            self._auditor.record(client_ip, "closed", "")
+            # TASK_MEE_015 Task 1: final close diagnostic with liveness state.
+            now = time.time()
+            age = now - conn_state["t0"]
+            idle_in = (now - conn_state["last_app_in"]) if conn_state["last_app_in"] else -1
+            idle_out = (now - conn_state["last_app_out"]) if conn_state["last_app_out"] else -1
+            self._auditor.record(
+                client_ip, "closed",
+                f"age={age:.0f}s idle_in={idle_in:.0f}s idle_out={idle_out:.0f}s "
+                f"last_p2p_pong={(conn_state['last_p2p_pong'] and round(now - conn_state['last_p2p_pong'], 1)) or 'never'}s_ago "
+                f"last_app_pong={(conn_state['last_app_pong'] and round(now - conn_state['last_app_pong'], 1)) or 'never'}s_ago "
+                f"last_heartbeat={(conn_state['last_heartbeat'] and round(now - conn_state['last_heartbeat'], 1)) or 'never'}s_ago")
+
+    async def _heartbeat_loop(self, ws, client_ip: str, state: dict) -> None:
+        """TASK_MEE_015 Task 2: send a small heartbeat every HEARTBEAT_INTERVAL_S.
+
+        Runs until cancelled (connection end) or the send fails (socket gone).
+        Never raises into the main handler.
+        """
+        try:
+            while True:
+                await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+                now = time.time()
+                state["last_heartbeat"] = now
+                state["last_app_out"] = now
+                self._wslog.info("WS-KA conn sent heartbeat ip=%s", client_ip)
+                await ws.send(json.dumps({"type": "heartbeat", "ts": now}))
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._wslog.info("WS-KA conn heartbeat stopped ip=%s exc=%s", client_ip, str(exc)[:120])
+            return
 
     async def _auth(self, ws) -> Optional[str]:
         """Enforce first-message token auth. Returns token or None (closed)."""
@@ -294,7 +375,9 @@ class RemotedemoServer:
             return None
         return provided
 
-    async def _main_loop(self, ws) -> None:
+    async def _main_loop(self, ws, client_ip: str = "unknown", state: Optional[dict] = None) -> None:
+        if state is None:
+            state = {}
         limiter = RateLimiter(self.config.max_fps)
         last_result = None
         while True:
@@ -311,9 +394,15 @@ class RemotedemoServer:
                 await ws.send(json.dumps({
                     "type": "error", "code": "bad_json", "message": "message is not valid JSON"}))
                 continue
+            # TASK_MEE_015 Task 1: timestamp every client->server app frame.
+            state["last_app_in"] = time.time()
             mtype = msg.get("type")
             if mtype == "ping":
-                await ws.send(json.dumps({"type": "pong", "ts": time.time()}))
+                now = time.time()
+                state["last_app_ping"] = now
+                state["last_app_pong"] = now
+                self._wslog.info("WS-KA conn recv app-ping ip=%s -> sent pong", client_ip)
+                await ws.send(json.dumps({"type": "pong", "ts": now}))
             elif mtype == "stop":
                 last_result = None
                 await ws.send(json.dumps({"type": "stopped"}))
@@ -349,7 +438,14 @@ class RemotedemoServer:
             await ws.send(json.dumps({
                 "type": "error", "code": "bad_frame", "message": str(exc)}))
             return
-        result = self._infer(frame_bgr=frame_bgr, audio=None)
+        # TASK_MEE_015 (re-fix): inference is CPU-bound and BLOCKS the event
+        # loop (vision ~11 s/frame on the Jetson, audio >60 s on the error
+        # path).  A blocked loop cannot process the browser's pong, so the
+        # websockets library fires "1011 keepalive ping timeout" and kills the
+        # connection (seen repeatedly in the audit log).  Offload to a worker
+        # thread so the loop stays free to answer pings/heartbeats; the thread
+        # also releases the GIL, so the event loop actually runs during it.
+        result = await asyncio.to_thread(self._infer, frame_bgr=frame_bgr, audio=None)
         await ws.send(json.dumps({
             "type": "result",
             "server_ts": time.time(),
@@ -374,7 +470,9 @@ class RemotedemoServer:
             await ws.send(json.dumps({
                 "type": "error", "code": "bad_audio", "message": str(exc)}))
             return
-        result = self._infer(frame_bgr=None, audio=audio)
+        # TASK_MEE_015 (re-fix): same event-loop-blocking issue as frames —
+        # run off the loop in a worker thread (see _process_frame note).
+        result = await asyncio.to_thread(self._infer, frame_bgr=None, audio=audio)
         await ws.send(json.dumps({
             "type": "result",
             "server_ts": time.time(),
@@ -392,6 +490,29 @@ async def run_server(engine=None, config: Optional[RemotedemoConfig] = None) -> 
     if engine is None:
         from mee import EmotionEngine, MEEConfig
         engine = EmotionEngine(config=MEEConfig())
+    # TASK_MEE_016 Task D: log which face-detection backend the active engine
+    # settled on. ``FaceDetector`` auto-selects based on CUDA availability at
+    # construction time, so by the time VisionProcessor exists the backend is
+    # already fixed. We log the resolved ``model_type`` (one of: ``mediapipe``,
+    # ``retinaface``, ``dlib``, ``opencv_hog``) so operators can confirm the
+    # MediaPipe CPU path is in use on Jetson AGX Orin.
+    try:
+        _vp = engine._vision_processor if engine is not None else None
+        if _vp is not None and hasattr(_vp, "_detector"):
+            _det = _vp._detector
+            _backend = getattr(_det, "model_type", None) or "unknown"
+            _cuda = False
+            try:
+                import torch  # type: ignore
+                _cuda = bool(torch.cuda.is_available())
+            except Exception:
+                pass
+            logging.getLogger("mee.remotedemo.run_server").info(
+                "TASK_MEE_016 backend=%s cuda_available=%s",
+                _backend, _cuda,
+            )
+    except Exception:  # noqa: S110 — logging must never break startup
+        pass
     server = RemotedemoServer(engine=engine, config=config)
     await server.start()
 

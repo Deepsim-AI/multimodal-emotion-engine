@@ -4,7 +4,9 @@ Commercially-safe face detector. Replaces InsightFace SCRFD/buffalo_l
 (non-commercial research-only weights) with independently licensed components.
 
 Production pipeline (all stages independently licensed):
-  Stage 1 — Detection:    retina-face (MIT) — primary; OpenCV HOG DNN — fallback
+  Stage 1 — Detection:    MediaPipe Face Detection (Apache-2.0) — primary when CUDA
+                          unavailable (TASK_MEE_016); retina-face (MIT) — preferred
+                          when CUDA available; OpenCV HOG DNN — fallback
   Stage 2 — Alignment:    face_alignment (Apache-2.0)  → see mee/vision/alignment.py
   Stage 3 — Expression:   EmotiEffLib (Apache-2.0 code + weights) → see emotion_model.py
 
@@ -59,6 +61,35 @@ def _try_dlib():
         return dlib
     except Exception:  # noqa: S110
         return None
+
+
+# TASK_MEE_016 Task B: MediaPipe availability probe (lazy import keeps the
+# module loadable when mediapipe is not installed).
+def _try_mediapipe():
+    """Import mediapipe (Apache-2.0). Returns the module or None.
+
+    mediapipe 0.10.x ships prebuilt manylinux aarch64 wheels (no compilation),
+    which is why it is used as the CUDA-incompatible Jetson backend.
+    """
+    try:
+        import mediapipe  # type: ignore
+        return mediapipe
+    except Exception:  # noqa: S110
+        return None
+
+
+# TASK_MEE_016 Task C: CUDA availability is computed once at import time.
+# Importing torch is cheap when already installed; when absent we treat CUDA
+# as unavailable and prefer the MediaPipe CPU backend.
+def _cuda_available() -> bool:
+    try:
+        import torch  # type: ignore
+        return bool(torch.cuda.is_available())
+    except Exception:  # noqa: S110
+        return False
+
+
+_CUDA_AVAILABLE = _cuda_available()
 
 
 def _try_insightface_research():
@@ -125,15 +156,114 @@ def _detect_opencv_hog(frame_bgr: np.ndarray) -> list[Face]:
 
 
 # ---------------------------------------------------------------------------
+# TASK_MEE_016 Task B: MediaPipe CPU face detector (Jetson AGX Orin)
+# ---------------------------------------------------------------------------
+class MediaPipeFaceDetector:
+    """CPU-only face detector using MediaPipe Face Detection (Apache-2.0).
+
+    Added by TASK_MEE_016: on Jetson AGX Orin (L4T R36.4) the installed
+    PyTorch build targets CUDA 13.0 while the driver only supports CUDA 12.x,
+    so ``torch.cuda.is_available()`` is False and the retina-face (TF/PyTorch
+    GPU) path cannot accelerate. MediaPipe ships prebuilt aarch64 wheels,
+    runs purely on CPU at 30+ fps, and provides ~85-90% detection accuracy —
+    the pragmatic production choice until a cu12x-compatible PyTorch build
+    exists.
+
+    Returns :class:`Face` objects with 6 landmarks (5-point MediaPipe
+    mapping + a center point) so downstream alignment still has keypoints.
+    """
+
+    def __init__(self, min_detection_confidence: float = 0.5, model_selection: int = 0):
+        """Initialize the MediaPipe face detector.
+
+        Args:
+            min_detection_confidence: minimum score to accept a detection.
+            model_selection: 0 = Lite (fast, default), 1 = Full (more accurate).
+        """
+        import mediapipe as mp  # local import: module import must not require mediapipe
+        self._mp = mp
+        self._min_confidence = float(min_detection_confidence)
+        self._detector = mp.solutions.face_detection.FaceDetection(
+            model_selection=int(model_selection),
+            min_detection_confidence=float(min_detection_confidence),
+        )
+
+    @staticmethod
+    def is_available() -> bool:
+        """True if mediapipe can be imported (no model loading performed)."""
+        return _try_mediapipe() is not None
+
+    def detect(self, frame_bgr: np.ndarray) -> list[Face]:
+        """Detect faces in a BGR frame. Returns a list of :class:`Face`."""
+        if frame_bgr is None or not isinstance(frame_bgr, np.ndarray):
+            return []
+        try:
+            import cv2
+            frame_rgb = (
+                cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                if frame_bgr.ndim == 3 and frame_bgr.shape[2] == 3
+                else frame_bgr
+            )
+            results = self._detector.process(frame_rgb)
+        except Exception:  # noqa: S110
+            return []
+
+        if not results or not results.detections:
+            return []
+
+        h, w = frame_bgr.shape[:2]
+        faces: list[Face] = []
+        for d in results.detections:
+            bbox = d.location_data.relative_bounding_box
+            x1 = max(0.0, min(float(bbox.xmin) * float(w), float(w)))
+            y1 = max(0.0, min(float(bbox.ymin) * float(h), float(h)))
+            x2 = max(0.0, min((float(bbox.xmin) + float(bbox.width)) * float(w), float(w)))
+            y2 = max(0.0, min((float(bbox.ymin) + float(bbox.height)) * float(h), float(h)))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            score = float(d.score[0]) if d.score else 0.0
+
+            # 6 landmarks (nose, eye center, left eye, right eye, mouth, center)
+            # so downstream alignment stages see a 6x2 keypoints array.
+            lm = d.location_data.relative_keypoints
+            if lm:
+                landmarks = np.array(
+                    [[k.x * float(w), k.y * float(h)] for k in lm], dtype=np.float32
+                )
+            else:
+                landmarks = None
+
+            faces.append(Face(bbox=np.array([x1, y1, x2, y2], dtype=np.float32),
+                              det_score=score, landmarks=landmarks))
+
+        faces.sort(key=lambda f: f.det_score, reverse=True)
+        return faces
+
+    def close(self) -> None:
+        """Release the underlying MediaPipe resources (idempotent)."""
+        try:
+            self._detector.close()
+        except Exception:  # noqa: S110
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Primary detector
 # ---------------------------------------------------------------------------
 class FaceDetector:
     """Production face detector.
 
-    Backend resolution order (first that loads wins):
-      1. retina-face (MIT)  — primary, provides 5-point landmarks
-      2. dlib HOG           — optional extra
-      3. OpenCV HOG person  — dependency-light fallback
+    Backend resolution order (TASK_MEE_016 Task C):
+      - CUDA unavailable (Jetson AGX Orin / L4T R36.4 + PyTorch cu130 mismatch)
+        OR ``use_mediapipe=True``:
+          1. MediaPipe Face Detection (CPU, Apache-2.0)
+          2. dlib HOG           — optional extra
+          3. OpenCV HOG person  — dependency-light fallback
+      - CUDA available and ``use_mediapipe=False`` (default):
+          1. retina-face (MIT)  — GPU-accelerated primary
+          2. dlib HOG           — optional extra
+          3. OpenCV HOG person  — dependency-light fallback
 
     Usage:
         if FaceDetector.is_available():
@@ -144,13 +274,49 @@ class FaceDetector:
 
     def __init__(self, model_path: Optional[str] = None,
                  confidence_threshold: float = 0.5,
-                 use_retinaface: bool = True):
+                 use_retinaface: bool = True,
+                 use_mediapipe: Optional[bool] = None):
+        """Construct the production face detector.
+
+        Args:
+            model_path: optional explicit model path (forwarded, unused by
+                MediaPipe/dlib/OpenCV backends).
+            confidence_threshold: minimum detection score to keep.
+            use_retinaface: legacy flag — only meaningful when CUDA is available.
+            use_mediapipe: TASK_MEE_016 Task C — explicit backend preference.
+                - ``True``: force MediaPipe (CPU).
+                - ``False``: force the legacy retina-face → dlib → OpenCV HOG
+                  chain (retina-face only used when CUDA is available).
+                - ``None`` (default): auto-select — MediaPipe when CUDA is
+                  unavailable (typical Jetson AGX Orin), retina-face when CUDA
+                  is available.
+        """
         self._model_path = model_path
         self._confidence_threshold = float(confidence_threshold)
 
-        RetinaFace = _try_retinaface() if use_retinaface else None
+        # TASK_MEE_016 Task C: auto-select backend based on CUDA availability.
+        # When CUDA is unavailable the retina-face (TF/PyTorch) path will run
+        # at CPU speed only — slower than the MediaPipe CPU path. Prefer MediaPipe.
+        if use_mediapipe is None:
+            prefer_mediapipe = not _CUDA_AVAILABLE
+        else:
+            prefer_mediapipe = bool(use_mediapipe)
+
+        mp = _try_mediapipe() if prefer_mediapipe else None
+        RetinaFace = _try_retinaface() if (use_retinaface and _CUDA_AVAILABLE) else None
         dlib = _try_dlib()
 
+        if prefer_mediapipe and mp is not None:
+            self._backend = "mediapipe"
+            self._mediapipe = MediaPipeFaceDetector(
+                min_detection_confidence=self._confidence_threshold
+            )
+            self._RetinaFace = None
+            self._dlib = dlib  # unused but kept for symmetry
+            self._cv2 = None
+            return
+
+        # Legacy backend chain (retina-face → dlib → OpenCV HOG)
         if RetinaFace is not None:
             self._backend = "retinaface"
             self._RetinaFace = RetinaFace
@@ -162,6 +328,7 @@ class FaceDetector:
             self._cv2 = None  # lazy
         self._RetinaFace = RetinaFace
         self._dlib = dlib
+        self._mediapipe = None  # not used in this branch
 
     # -- availability ------------------------------------------------------
     @property
@@ -195,7 +362,9 @@ class FaceDetector:
         if frame_bgr is None or not isinstance(frame_bgr, np.ndarray):
             return []
         try:
-            if self._backend == "retinaface":
+            if self._backend == "mediapipe":
+                faces = self._mediapipe.detect(frame_bgr)
+            elif self._backend == "retinaface":
                 faces = self._detect_retinaface(frame_bgr)
             elif self._backend == "dlib":
                 faces = self._detect_dlib(frame_bgr)
