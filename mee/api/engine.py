@@ -31,9 +31,16 @@ class MEEConfig:
     vision_model_path: Optional[str] = None
     face_confidence_threshold: float = 0.7
     detect_every_n_frames: Optional[int] = None  # TASK_MEE_013 Task 2: 1=every pass (default); n>1 reuses detection for n passes
+    use_mediapipe: Optional[bool] = None  # TASK_MEE_016 Task C: None=auto (CUDA-driven); True=force MediaPipe CPU; False=force legacy chain
     voice_model_path: Optional[str] = None
     audio_sample_rate: int = 16000
     output_format: str = "json"
+    # TASK_MEE_CONTRACT_ENHANCEMENT_001 Gap A: opt-in conflict-reason exposure.
+    # "off" (default) -> output identical to prior behaviour (no conflict_reason key).
+    # "reason_only" -> when overall.conflict is True, overall.conflict_reason is
+    # included (human-readable string from FusionResult.conflict_reason). New key;
+    # never replaces/renames an existing key.
+    detail_level: str = "off"
 
 
 @dataclass
@@ -103,6 +110,8 @@ class EmotionEngine:
                     confidence_threshold=self.config.face_confidence_threshold,
                     # TASK_MEE_013 Task 2: thread detection-frequency knob (G4 R2)
                     detect_every_n_frames=self.config.detect_every_n_frames or 1,
+                    # TASK_MEE_016 Task C: thread backend-preference knob
+                    use_mediapipe=self.config.use_mediapipe,
                 )
             except Exception:
                 self._vision_processor = None  # graceful degradation
@@ -203,11 +212,17 @@ class EmotionEngine:
         """
         vision = face.to_dict() if face.has_face else None
         result = self._fusion.compute_fusion(vision=vision, voice=voice)
-        return {
+        overall = {
             "emotion": result.emotion,
             "confidence": result.confidence,
             "conflict": result.conflict,
         }
+        # TASK_MEE_CONTRACT_ENHANCEMENT_001 Gap A: surface conflict_reason when opted in.
+        # Additive: only present when detail_level == "reason_only" AND conflict is True.
+        # Never present under the default detail_level ("off"), preserving the prior contract.
+        if getattr(self.config, "detail_level", "off") == "reason_only" and result.conflict:
+            overall["conflict_reason"] = result.conflict_reason
+        return overall
 
     def _compute_trend(self) -> str:
         """TASK_MEE_006 Subtask 4: trend from accumulated emotion history.
@@ -224,6 +239,34 @@ class EmotionEngine:
     @property
     def is_ready(self) -> bool:
         return self._model_ready
+
+    def health(self) -> dict:
+        """TASK_MEE_CONTRACT_ENHANCEMENT_001 Gap B: real readiness signal.
+
+        Pure read of internal model-load state. Does NOT call process(), the
+        constructor, or any other method. Never raises — returns a dict with:
+          status: "ready" | "degraded" | "unavailable"
+          detail: human-readable explanation
+
+        Status derivation:
+          - ready       : both vision and voice processors loaded
+          - degraded    : exactly one of {vision, voice} loaded
+          - unavailable : neither loaded
+        """
+        vision_ok = self._vision_processor is not None
+        voice_ok = self._voice_processor is not None
+
+        if vision_ok and voice_ok:
+            return {"status": "ready", "detail": "All models loaded (vision + voice)"}
+        if vision_ok or voice_ok:
+            return {
+                "status": "degraded",
+                "detail": (
+                    f"Vision: {'OK' if vision_ok else 'missing'}, "
+                    f"Voice: {'OK' if voice_ok else 'missing'}"
+                ),
+            }
+        return {"status": "unavailable", "detail": "No models loaded"}
 
 
 # Convenience import alias
