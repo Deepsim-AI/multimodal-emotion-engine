@@ -54,3 +54,16 @@ python demo/emotion_demo.py --headless --output /tmp/mee_results.jsonl --duratio
   expected input granularity.
 - The UI is a **consumer** of the public API only — it never touches
   `_infer_vision`, `_infer_voice`, `_fuse`, or any model internals.
+- **2026-10-17 — voice runs in a separate worker process on this Jetson.**
+  Loading the SpeechBrain/torch voice runtime and the MediaPipe vision
+  runtime in the *same* process segfaults on this host (native
+  C-runtime collision). The engine therefore drives voice through
+  `mee/voice/voice_worker.py` (spawned via
+  `mee/voice/voice_worker_client.py`) so **camera and mic recognition are
+  both available at once.** Set `MEE_VOICE_ENABLED=0` to disable voice.
+- **2026-10-17 — the mic-level meter + "mic silent" hint.** When the voice
+  panel shows no bars, the mic is usually delivering silence (the browser
+  blocked `getUserMedia` on the self-signed HTTPS origin). The Microphone
+  indicator now has a live amplitude meter, and the voice panel says
+  `🎤 mic silent (no voice energy…)` to distinguish a silent mic from a
+  pipeline failure.

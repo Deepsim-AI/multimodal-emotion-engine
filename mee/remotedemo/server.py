@@ -494,6 +494,25 @@ class RemotedemoServer:
                 await self._process_frame(ws, msg, limiter)
             elif mtype == "audio":
                 await self._process_audio(ws, msg, client_ip=client_ip)
+            elif mtype in ("mute", "unmute"):
+                # 2026-10-16: The browser client sends {type:"mute",audio:true}
+                # when the mic is off (TASK_MEE_015) so the UI can show "voice
+                # muted". The server had no branch for it -> it replied
+                # {type:"error",code:"unknown_type"} which the client rendered
+                # as "Connected — server error". Voice inference is disabled
+                # server-side on this host (see MEE_VOICE_ENABLED), so mute is a
+                # pure intent signal: acknowledge it with mute_ok instead of
+                # erroring, and record the intent for the connection state.
+                muted = bool(msg.get("audio", mtype == "mute"))
+                state["voice_muted"] = muted
+                self._wslog.info(
+                    "WS-MUTE conn mute audio=%s ip=%s (voice path %s)",
+                    muted, client_ip,
+                    "disabled" if not getattr(self.engine.config, "voice_enabled", True) else "active",
+                )
+                await ws.send(json.dumps({
+                    "type": "mute_ok", "audio": muted, "ts": time.time(),
+                }))
             else:
                 await ws.send(json.dumps({
                     "type": "error", "code": "unknown_type",

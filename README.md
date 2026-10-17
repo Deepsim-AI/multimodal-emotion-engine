@@ -92,7 +92,7 @@ multimodal-emotion-engine/
 │   │   ├── detector.py        # Stage 1: Face detection (retina-face)
 │   │   ├── alignment.py       # Stage 2: Face alignment/cropping (face-alignment)
 │   │   └── emotion_model.py   # Stage 3: Expression classification (EmotiEffLib)
-│   ├── voice/        # Voice emotion pipeline
+│   ├── voice/        # Voice emotion pipeline (+ out-of-process voice_worker.py / voice_worker_client.py on hosts where the voice+vision runtimes collide)
 │   ├── fusion/       # Multimodal fusion
 │   ├── state/        # Temporal state tracking
 │   └── api/          # Public API (EmotionEngine)

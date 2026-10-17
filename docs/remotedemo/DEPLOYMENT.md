@@ -45,6 +45,16 @@ bash mee-remotedemo-start.sh
 
 This starts all three services and prints your access token + URLs.
 
+> **2026-10-17 — voice runs in a separate worker process.** On this Jetson,
+> loading the SpeechBrain/torch voice runtime and the MediaPipe vision runtime
+> in the *same* process segfaults (native C-runtime collision). The demo
+> therefore launches voice in its own subprocess (`mee/voice/voice_worker.py`,
+> driven by the engine via `mee/voice/voice_worker_client.py`) so **camera and
+> mic recognition are both available at once.** The script exports
+> `MEE_VOICE_ENABLED=1` (both channels on). Set it to `0` to disable voice.
+> The worker is spawned lazily on the first audio message and cleaned up on
+> engine shutdown / server stop.
+
 ### Manual steps
 
 #### Prerequisites
@@ -153,11 +163,27 @@ These servers are **not** installed as system services for the prototype — the
 
 ### Stop everything (quick)
 
+> **2026-10-16 fix — use the stop script.** On this aarch64 Jetson the old
+> `pkill` bracket-idiom patterns silently failed to match the real processes,
+> which stacked stale watchdogs and left a stale server in charge. The scripts
+> now use **PID files** (`.run/*.pid`) + port release (`fuser -k`), which are
+> exact. Use this:
+
+```bash
+bash /home/deepsim/multimodal-emotion-engine/mee-remotedemo-stop.sh
+```
+
+The stop script kills the **watchdog first** (it respawns the WS server), then
+the WS server and HTTPS page by PID, then releases ports 8910/8443 no matter
+who holds them, and prints any remaining MEE processes.
+
+<details>
+<summary>Manual / legacy pkill (last resort only)</summary>
+
 ```bash
 pkill -f 'mee-ws-watchdo[g]d'         # watchdog FIRST (else it respawns the server)
 pkill -f 'mee.remote[d]emo.server'    # WebSocket server (port 8910)
 pkill -f 'remote[d]emo/https_server'  # HTTPS static page (port 8443)
-pkill -f 'tailscale funnel 8910'      # Tailscale Funnel (legacy only; usually not running)
 ```
 
 Verify nothing is left running:
@@ -169,7 +195,9 @@ pgrep -af 'https_server'          || echo "page server: stopped"
 ss -tlnp | grep -E '8910|8443'   || echo "ports free"
 ```
 
-> The `[d]` in the pattern is a trick: it prevents `pkill` from matching its *own* command line (which also contains the string), avoiding a self-kill.
+> The `[d]` in the pattern is a trick: it prevents `pkill` from matching its *own* command line (which also contains the string), avoiding a self-kill. **On this host these bracket patterns can mis-match** — prefer the stop script above.
+
+</details>
 
 > **Order matters:** stop the **watchdog first**. If the watchdog is still running when you kill the WS server, it will detect the missing listener within ~5 s and respawn it.
 
@@ -204,6 +232,15 @@ Find the PID with `pgrep -f 'remote[d]emo.server'` or `ss -tlnp | grep 8910`.
 ### Restart (stop, then start again)
 
 ```bash
+# stop + start (recommended — exact PID/port cleanup)
+bash ~/multimodal-emotion-engine/mee-remotedemo-stop.sh
+bash ~/multimodal-emotion-engine/mee-remotedemo-start.sh
+```
+
+<details>
+<summary>Manual restart (two services, no watchdog)</summary>
+
+```bash
 # stop
 pkill -f 'mee.remote[d]emo.server'
 pkill -f 'https_server'
@@ -213,6 +250,8 @@ cd /home/deepsim/multimodal-emotion-engine
 python3 -m mee.remotedemo.server &
 (cd mee/remotedemo && python3 https_server.py) &
 ```
+
+</details>
 
 ### Restart after the PC/Jetson reboots
 
@@ -400,6 +439,9 @@ The token is auto-generated on first start (same as Step 2 above).
 | **`tailscale funnel: invalid flag` error** | *(legacy path only)* Use `tailscale funnel 8910`, not `--https 443:8910`. The primary path is now Pangolin — you shouldn't need Funnel at all. |
 | **"Token expired" or auth fails** | Token mismatch. Verify `cat ~/.config/mee-remotedemo/token` matches what you told the tester. Delete and restart the server to generate a new one. |
 | **No emotion results** | Engine model may not have loaded yet. Check `/tmp/mee-ws.log` for import errors, or wait 10–30 seconds after startup for the engine to initialize. |
+| **Face works but "Voice Emotion — no voice data" / all-zero bars** | The voice pipeline is fine — your **mic is delivering silence**. 2026-10-17: the panel now says `🎤 mic silent (no voice energy…)` and there is a **live mic-level meter** next to the Microphone indicator. If that meter stays at 0% while you speak, the mic track is silent — most often the browser blocked `getUserMedia` on the self-signed `https://` origin. Check the address-bar padlock → site settings → Microphone = **Allowed**, ensure the correct input device is selected, and hard-reload (`Ctrl/Cmd+Shift+R`). Verify on the server: `grep 'WS-KA-audio' /tmp/mee-ws.log \| tail` — `mean_abs` near 0.0 = silent; a real voice shows `mean_abs` ~0.05+. |
+| **"Server error" banner / `unknown message type 'mute'`** | 2026-10-16: fixed. The server now acks the client's `{type:"mute"}` mic-toggle message with `mute_ok` instead of erroring. If you see it again, you're running an older server — restart via `mee-remotedemo-stop.sh` + `mee-remotedemo-start.sh`. |
+| **Voice recognition segfaults / server crashes on audio** | 2026-10-17: voice now runs in a **separate worker process** (`MEE_VOICE_ENABLED=1`), so the SpeechBrain/torch voice runtime no longer shares an address space with the MediaPipe vision runtime (that in-process combination segfaults this host). If it still crashes, confirm `MEE_VOICE_ENABLED` is `1` in the start script and restart. |
 | **China mainland unreachable** | Funnel may be blocked by the GFW. Use the VPS fallback above. |
 | **"Keep-alive" or "invalid Connection header"** | You're hitting the WebSocket server with a regular HTTP request (e.g., `http://127.0.0.1:8910/` in the browser address bar). This is expected — the server only speaks WebSocket. Use the Funnel URL and the HTML client instead. |
 | **"empty Connection header" / "Failed to open a WebSocket connection"** | You connected with `ws://` (plaintext). Use `wss://meews.deepsim.ai:8443/` (Pangolin, TLS). Reserve `ws://` for same-tailnet/same-machine IPs like `ws://127.0.0.1:8910`. |

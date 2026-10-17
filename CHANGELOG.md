@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+**Remote Demo — Voice in a Separate Worker Process + Mic-Silence Diagnostics (2026-10-17):**
+- Root-caused two remote-demo voice issues: (a) the browser's `{type:"mute"}` mic-toggle message was unhandled and rendered as a `"Server error"` banner; (b) on this Jetson, loading the SpeechBrain/torch voice runtime and the MediaPipe vision runtime in the *same* process **segfaults** (native C-runtime collision — verified each works alone, combined load dumps core).
+- `mee/voice/voice_worker.py` (new) — out-of-process voice worker: loads the voice runtime, speaks newline-delimited JSON over stdin/stdout, never imports the vision stack.
+- `mee/voice/voice_worker_client.py` (new) — thread-safe client that spawns/drives the worker, serializes audio as base64, returns a result dict; degrades gracefully if the worker can't start.
+- `mee/api/engine.py` — `MEEConfig.voice_enabled` (env `MEE_VOICE_ENABLED`); voice now routes through the worker client (`_ensure_voice_worker`) so camera + mic recognition are **both available at once**; `shutdown()` releases the worker.
+- `mee/remotedemo/server.py` — added `mute`/`unmute` branch that acks the client's mic-toggle with `mute_ok` (no more `unknown message type 'mute'` / "Server error").
+- `mee/remotedemo/index.html` — **live mic-level meter** next to the Microphone indicator, and the voice panel now distinguishes `🎤 mic silent (no voice energy…)` from a real low-confidence result (fixes the ambiguous "no voice data").
+- `mee-remotedemo-start.sh` — PID-file + port-kill cleanup (replaces the aarch64-unreliable `pkill` bracket idiom), `wait_port` verification, exports `MEE_VOICE_ENABLED=1`.
+- `mee-remotedemo-stop.sh` (new) — companion stop script (watchdog first, then by PID, then release ports 8910/8443).
+- Docs updated: `docs/remotedemo/DEPLOYMENT.md`, `docs/remotedemo/ACCESS.md`, `docs/DEMO.md` (voice-worker isolation, stop script, mic-silence troubleshooting).
+
+### Notes
+
+- **Voice isolation is the enabling fix for both channels on this host.** The worker process keeps the SpeechBrain/torch and MediaPipe runtimes in separate address spaces, which is what makes camera + mic work together. `MEE_VOICE_ENABLED=0` disables voice.
+- The "no voice data" symptom was confirmed to be a **silent mic track** (146/148 segments `mean_abs < 0.01`), not a pipeline bug — most often the browser blocking `getUserMedia` on the self-signed `https://` origin. The new mic-level meter + `WS-KA-audio mean_abs` log line let the operator verify it.
+
 **Remote Demo Public Access Migration to Pangolin (TASK_MEE_035):**
 - Public access moved from **Tailscale Funnel** (`jetson-agx.tail0d394d.ts.net`) to **Pangolin** on `deepsim.ai`: page `https://mee.deepsim.ai:8443/`, WebSocket `wss://meews.deepsim.ai:8443/`
 - `index.html` — default Server URL is now `wss://meews.deepsim.ai:8443/` (auto-filled); dead Tailscale-Funnel default removed; `meews`/`mee` host branch added; placeholder updated

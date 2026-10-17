@@ -168,7 +168,14 @@ code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12p
       </div>
       <div class="row indicators">
         <span><span id="camDot" class="dot off"></span>Camera</span>
-        <span><span id="micDot" class="dot off"></span>Microphone</span>
+        <span><span id="micDot" class="dot off"></span>Microphone
+          <span id="micLevel" title="Live mic amplitude (should move when you speak)">
+            <span style="display:inline-block;width:60px;height:8px;background:#0004;border-radius:4px;overflow:hidden;vertical-align:middle;margin-left:6px">
+              <span id="micLevelFill" style="display:block;height:100%;width:0%;background:#3ad29f;transition:width 80ms linear"></span>
+            </span>
+            <span id="micLevelTxt" style="margin-left:4px;font-size:11px;color:var(--muted)">0%</span>
+          </span>
+        </span>
         <span id="fpsLabel">FPS: —</span>
         <span id="latencyLabel">Latency: —</span>
       </div>
@@ -393,7 +400,14 @@ function renderResult(data, source) {
   if (data.voice) {
     const vConf = data.voice.confidence != null ? data.voice.confidence : 0;
     const vEmo = data.voice.emotion || "—";
-    if (vConf < 0.01) {
+    // 2026-10-17: the worker returns a REAL result even for silent audio — it
+    // just scores everything near-zero (bars render at 0% width = invisible).
+    // Distinguish "mic silent" from a genuine missing/low-confidence result.
+    const vs = (data.voice.scores || {});
+    const vSum = Object.values(vs).reduce((a, b) => a + (Number(b) || 0), 0);
+    if (vSum < 0.02) {
+      voiceMeta = "🎤 mic silent (no voice energy — speak into the mic; watch the mic-level meter)";
+    } else if (vConf < 0.01) {
       voiceMeta = "⚠️ " + vEmo + " · " + Math.round(vConf * 100) + "% (very low confidence — check mic hardware / audio format)";
       const vMetaEl = $("voiceMeta");
       if (vMetaEl) vMetaEl.title = "Very low confidence (" + vConf.toFixed(4) + ") — possible audio format mismatch or model returning default.";
@@ -840,6 +854,15 @@ function startAudioLoop() {
   const CHUNK_SAMPLES = 320; // 20 ms @ 16 kHz
   proc.onaudioprocess = (ev) => {
     const inp = ev.inputBuffer.getChannelData(0);
+    // 2026-10-17: live mic-level meter so the user can SEE whether the mic is
+    // actually delivering sound (silent track = the "no voice data" symptom).
+    {
+      let peak = 0;
+      for (let i = 0; i < inp.length; i++) { const a = inp[i] < 0 ? -inp[i] : inp[i]; if (a > peak) peak = a; }
+      const fill = $("micLevelFill"), txt = $("micLevelTxt");
+      if (fill) fill.style.width = Math.min(100, peak * 100).toFixed(1) + "%";
+      if (txt) txt.textContent = Math.round(peak * 100) + "%";
+    }
     // Resample if needed (simple linear interp) — AudioContext may run at 48k.
     const ratio = audioCtx.sampleRate / 16000;
     let out;

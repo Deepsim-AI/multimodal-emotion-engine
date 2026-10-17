@@ -13,6 +13,7 @@ contract (face, voice, overall, trend, latency_ms) unchanged.
 from __future__ import annotations
 
 import time
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -33,6 +34,14 @@ class MEEConfig:
     detect_every_n_frames: Optional[int] = None  # TASK_MEE_013 Task 2: 1=every pass (default); n>1 reuses detection for n passes
     use_mediapipe: Optional[bool] = None  # TASK_MEE_016 Task C: None=auto (CUDA-driven); True=force MediaPipe CPU; False=force legacy chain
     voice_model_path: Optional[str] = None
+    # 2026-10-16: On this Jetson host, loading the SpeechBrain/torch voice
+    # runtime in the same process as the MediaPipe vision runtime segfaults
+    # (native C-runtime collision — verified: each works alone, combined load
+    # dumps core). The browser remote demo is camera-only (no mic audio is
+    # sent), so the voice path is not needed there. Set voice_enabled=False
+    # (or env MEE_VOICE_ENABLED=0) to skip the voice runtime entirely and let
+    # vision results flow. Default True preserves existing behaviour.
+    voice_enabled: bool = field(default_factory=lambda: os.environ.get("MEE_VOICE_ENABLED", "1") != "0")
     audio_sample_rate: int = 16000
     output_format: str = "json"
     # TASK_MEE_CONTRACT_ENHANCEMENT_001 Gap A: opt-in conflict-reason exposure.
@@ -118,7 +127,13 @@ class EmotionEngine:
                 return None
         return self._vision_processor
     def _ensure_voice(self):
-        """TASK_MEE_005: Lazy-load the voice processor (one-time cost)."""
+        """TASK_MEE_005: Lazy-load the voice processor (one-time cost).
+
+        .. deprecated:: 2026-10-17
+            Retained for backward compatibility / tests, but the engine now
+            routes voice through :meth:`_ensure_voice_worker` (out-of-process)
+            to avoid the native runtime collision on this Jetson host.
+        """
         if not hasattr(self, '_voice_processor') or self._voice_processor is None:
             try:
                 from ..voice.processor import VoiceProcessor
@@ -126,6 +141,35 @@ class EmotionEngine:
             except Exception:
                 self._voice_processor = None  # graceful degradation
         return self._voice_processor
+
+    def _ensure_voice_worker(self):
+        """2026-10-17: Lazy-spawn the out-of-process voice worker.
+
+        Returns a ``VoiceWorkerClient`` (or None). The worker runs the
+        SpeechBrain/torch voice runtime in its OWN process so it never shares
+        an address space with the MediaPipe vision runtime (which segfaults
+        this host). Importing the client here is safe — it does not import
+        the voice runtime itself, only manages the subprocess.
+        """
+        if getattr(self, "_voice_worker", None) is None:
+            try:
+                from ..voice.voice_worker_client import VoiceWorkerClient
+                self._voice_worker = VoiceWorkerClient(
+                    cwd=os.environ.get("MEE_REPO_ROOT") or None,
+                )
+            except Exception:
+                self._voice_worker = None
+        return self._voice_worker
+
+    def shutdown(self) -> None:
+        """2026-10-17: Release the out-of-process voice worker if running."""
+        worker = getattr(self, "_voice_worker", None)
+        if worker is not None:
+            try:
+                worker.shutdown()
+            except Exception:
+                pass
+            self._voice_worker = None
 
     def process(
         self,
@@ -184,14 +228,24 @@ class EmotionEngine:
 
     def _infer_voice(self, audio=None) -> dict | None:
         """TASK_MEE_005: Real voice inference via VoiceProcessor."""
+        # 2026-10-16: voice runtime disabled (see MEEConfig.voice_enabled) —
+        # skip the SpeechBrain/torch load that collides with the MediaPipe
+        # vision runtime and segfaults the process. Camera-only demos rely on
+        # this so vision results still flow.
+        if not getattr(self.config, "voice_enabled", True):
+            return None
         if audio is None:
             return None
-        vp = self._ensure_voice()
-        if vp is None:
-            # Graceful degradation — no voice model available
+        # 2026-10-17: run voice in a SEPARATE worker process (see
+        # mee/voice/voice_worker_client.py). The SpeechBrain/torch runtime
+        # collides with the MediaPipe vision runtime if loaded in-process on
+        # this Jetson host (segfault), so we isolate it across a process
+        # boundary and only ship base64 audio / a result dict across it.
+        client = self._ensure_voice_worker()
+        if client is None or not client.available():
             scores = {label: 0.0 for label in ["angry", "disgust", "fear", "happy", "sad", "surprised", "neutral"]}
             return {"emotion": "neutral", "confidence": 0.0, "scores": scores}
-        result = vp.process(audio, self.config.audio_sample_rate)
+        result = client.infer(audio, self.config.audio_sample_rate)
         return {
             "emotion": result.get("emotion", "neutral"),
             "confidence": result.get("confidence", 0.0),

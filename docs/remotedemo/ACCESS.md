@@ -75,6 +75,14 @@ The right panel updates in real time:
   multimodal emotion estimate.
 - **Facial Expression**: bar chart of per-emotion scores from vision.
 - **Voice Emotion**: bar chart of per-emotion scores from audio.
+  - **2026-10-17:** if the voice bars stay empty, the mic is usually
+    delivering *silence* (the browser blocked `getUserMedia` on the
+    self-signed HTTPS origin). Look at the **live mic-level meter** next to
+    the Microphone indicator — it should fill as you speak. If it stays at
+    0%, the panel now says `🎤 mic silent (no voice energy…)` instead of the
+    ambiguous "no voice data". Check the address-bar padlock → site settings
+    → Microphone = **Allowed**, confirm the correct input device is
+    selected, and hard-reload (`Ctrl/Cmd+Shift+R`).
 - **Trend**: a short-lived directional indicator (improving / declining /
   stable / unstable).
 - **Latency**: last / average / min / max processing time on the Jetson.
@@ -98,6 +106,7 @@ Click **Disconnect** to close the WebSocket connection.
 | No permission prompt / "Permission denied" banner | Make sure you loaded the page over `https://`. Plain HTTP blocks camera/mic silently. Check the URL starts with `https://` and accept the self-signed cert warning. |
 | Camera/mic not detected | Check that no other app is using the device. Restart the browser. |
 | "Permission denied or no devices: TypeError" | This is a HTTPS issue — verify you are on `https://localhost:8443/` or `https://jetson-agx:8443/`, not `http://`. Accept the self-signed cert warning first. |
+| **Face works but voice shows no bars / "no voice data"** | 2026-10-17: the mic is delivering silence. Watch the **mic-level meter** next to the Microphone indicator — if it stays at 0% while you speak, the browser blocked the mic on the self-signed `https://` origin. Set Microphone = **Allowed** in the padlock/site settings, pick the right input device, and hard-reload. The voice panel now says `🎤 mic silent (no voice energy…)` so you can tell a silent mic from a real pipeline failure. |
 | No results after start | Wait a few seconds — the engine is processing. If still nothing, check that you are connected (green dot). |
 | "Connection closed" banner | Reconnect and re-authenticate. The server may have restarted. If you see "code 1008" specifically, the token was rejected — verify it matches the value your contact gave you. |
 | Very high latency (> 500 ms) | Check your network connection. High latency may also indicate server load. |
