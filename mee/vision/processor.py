@@ -69,7 +69,8 @@ class VisionProcessor:
                  model_path: Optional[str] = None,
                  confidence_threshold: float = 0.5,
                  aligner_size: int = 224,
-                 detect_every_n_frames: int = 1):  # TASK_MEE_013 Task 1
+                 detect_every_n_frames: int = 1,  # TASK_MEE_013 Task 1
+                 use_mediapipe: Optional[bool] = None):  # TASK_MEE_016 Task C
         """
         Args:
             detector: inject for tests; default FaceDetector().
@@ -85,6 +86,11 @@ class VisionProcessor:
                 for alignment + emotion until invalidated by a changed frame
                 (different array object or shape) or force_detection=True.
                 Not thread-safe: one VisionProcessor per thread.
+            use_mediapipe: TASK_MEE_016 Task C — forwarded to FaceDetector
+                when the default detector is constructed. ``None`` (default)
+                lets FaceDetector auto-select based on CUDA availability;
+                ``True`` forces the MediaPipe CPU backend; ``False`` forces
+                the legacy retina-face → dlib → OpenCV HOG chain.
         """
         # TASK_MEE_013 Task 1: validate detection-frequency knob
         if detect_every_n_frames < 1:
@@ -95,6 +101,7 @@ class VisionProcessor:
         self._detector = detector or FaceDetector(
             model_path=model_path,
             confidence_threshold=confidence_threshold,
+            use_mediapipe=use_mediapipe,  # TASK_MEE_016 Task C
         )
         self._aligner = aligner  # may be None (degrade to direct crop)
         self._emotion = emotion_model or EmotionModel(model_path=model_path)

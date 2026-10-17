@@ -322,6 +322,14 @@ class EmotionModel:
         with torch.no_grad():
             out = self._model.mods.wav2vec2(wav)
             emb = out.last_hidden_state if hasattr(out, "last_hidden_state") else out
+            n_steps = emb.shape[1]  # time dimension
+            kernel = getattr(self._model.mods.avg_pool, "kernel", None)
+            if kernel is None:
+                # Default SpeechBrain avg_pool kernel size
+                kernel = 2
+            if n_steps < kernel:
+                raise ValueError(f"avg_pool kernel ({kernel}) > input timesteps ({n_steps}); "
+                                 f"audio segment too short for emotion detection")
             emb = self._model.mods.avg_pool(emb, torch.ones(emb.shape[0], device=emb.device))
             logits = self._model.mods.output_mlp(emb).flatten()  # -> [N]
 

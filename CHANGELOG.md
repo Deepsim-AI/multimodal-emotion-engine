@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+**Remote Demo Public Access Migration to Pangolin (TASK_MEE_035):**
+- Public access moved from **Tailscale Funnel** (`jetson-agx.tail0d394d.ts.net`) to **Pangolin** on `deepsim.ai`: page `https://mee.deepsim.ai:8443/`, WebSocket `wss://meews.deepsim.ai:8443/`
+- `index.html` — default Server URL is now `wss://meews.deepsim.ai:8443/` (auto-filled); dead Tailscale-Funnel default removed; `meews`/`mee` host branch added; placeholder updated
+- `mee-remotedemo-start.sh` — 3-step start (WS → page → watchdog); Funnel demoted to optional legacy; prints new public URLs + live `/healthz` check
+- `docs/remotedemo/ACCESS.md`, `DEPLOYMENT.md`, `SECURITY.md` — public path rewritten to Pangolin; Funnel marked deprecated/legacy
+
+**Remote Demo Public Access & Stability (TASK_MEE_018):**
+- `server.py` — public funnel now serves the client page (`GET /`) and `GET /healthz` on the same port as the WS upgrade (`_http_endpoint`); `GET /token` **removed** (token handed out-of-band only)
+- `server.py` — CPU thread cap (`MEE_DEMO_MAX_THREADS`, default 2) applied before engine construction to tame inference CPU spikes on Jetson (`run_server()`)
+- `server.py` — startup banner with PID (`TASK_MEE_034`) + signal diagnostics for SIGTERM/SIGINT/SIGABRT (`TASK_MEE_035`, `_install_signal_diagnostics()`)
+- `index.html` — reconnect hardening (12 attempts → infinite 30 s retry), client-side ~10 FPS throttle, `rate_limited` banner silenced, manual token entry (no auto-fetch)
+- `https_server.py` (new) — HTTPS static page on 8443 (self-signed cert)
+- `mee-ws-watchdog.sh` (new) — auto-restarts the WS server within ~5 s if the listener disappears
+- `mee-remotedemo-start.sh` — 4-step startup (WS → page → funnel → watchdog) with labeled PUBLIC vs TAILNET URLs
+- `docs/remotedemo/ACCESS.md` + `docs/remotedemo/DEPLOYMENT.md` — public funnel URL primary, manual token entry, watchdog/stability/troubleshooting
+
 **Detection Frequency Decoupling (TASK_MEE_013):**
 - `detect_every_n_frames` knob in `VisionProcessor` (`mee/vision/processor.py`) and `MEEConfig` (`mee/api/engine.py`)
 - Decouples Stage-1 face-detection frequency from emotion-pass frequency: detection runs once and its result (bbox + landmarks) is reused for the next `n-1` passes, then re-detected

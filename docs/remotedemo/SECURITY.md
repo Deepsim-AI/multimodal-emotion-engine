@@ -15,7 +15,8 @@ model is deliberately narrow:
   internal network services, SSH access, Tailscale tailnet membership.
 - **Out of scope**: nation-state adversaries, sophisticated network attacks,
   multi-tenant abuse. The prototype is not exposed to the open internet beyond
-  a single Funnel/VPS endpoint and is used by a known, vetted party.
+  a single Pangolin (`meews.deepsim.ai`) / legacy-Funnel / VPS endpoint and is
+  used by a known, vetted party.
 
 ## IP boundary (what the tester NEVER receives)
 
@@ -24,8 +25,8 @@ model is deliberately narrow:
 | MEE source code | **None** | Server runs on the Jetson; only JSON results cross the wire. The browser client is a generic renderer that ships with no MEE code. |
 | Model weights (ONNX/RavNet) | **None** | Loaded in-process on the Jetson by `EmotionEngine`; never serialized or sent. |
 | Jetson filesystem | **None** | No file-serving endpoint. The browser client is a single static `index.html`; the WebSocket endpoint accepts only auth/frame/audio/ping/stop messages. |
-| SSH | **None** | Port 22 is not exposed to the tester. Only the demo port (via Funnel/VPS) is reachable. |
-| Tailscale tailnet | **None** | The tester is never added to the tailnet. Access is via a Funnel public URL (or VPS proxy) — no Tailscale client required on the tester's machine. |
+| SSH | **None** | Port 22 is not exposed to the tester. Only the demo endpoint (via Pangolin, or legacy Funnel/VPS) is reachable. |
+| Tailscale tailnet | **None** | The tester is never added to the tailnet. Access is via `meews.deepsim.ai` (Pangolin) — no Tailscale client required on the tester's machine. |
 | Internal services | **None** | The server binds to `127.0.0.1`. It is not reachable from the LAN or internet except through the single explicit proxy path. |
 
 **Bottom line**: the only thing that crosses the network boundary is a small
@@ -58,7 +59,8 @@ engine, its models, or the host is ever disclosed.
 ## Transport security
 
 - **TLS is mandatory**: browser `getUserMedia` (camera/mic) only works on
-  `https://` (or `localhost`). The Funnel/VPS endpoint terminates TLS.
+  `https://` (or `localhost`). Pangolin (or the legacy Funnel/VPS endpoint)
+  terminates TLS.
 - **WebSocket** carries the authenticated, frame/audio/result traffic.
 - The server binds to `127.0.0.1` — there is no direct LAN or internet path
   to it without the proxy.
@@ -93,7 +95,7 @@ broader exposure:
    individually revoked and attributed.
 2. **mTLS or a short-lived signed cookie** issued after token auth, to bound
    token reuse.
-3. **IP allow-list** on the Funnel/VPS endpoint if the tester's network is
+3. **IP allow-list** on the Pangolin / Funnel / VPS endpoint if the tester's network is
    stable.
 4. **Request size + rate limiting at the proxy** (nginx) as a first line of
    defense in front of the Python server.

@@ -14,6 +14,7 @@ Protocol (must stay in sync with mee/remotedemo/server.py):
     {"type":"auth_ok","protocol":"mee-remotedemo-v1"}
     {"type":"result","source":"frame|audio","server_ts":..., "data":{face,voice,overall,trend,latency_ms}}
     {"type":"pong","ts":...}
+    {"type":"heartbeat","ts":...}     — server keepalive (client may ignore; TASK_MEE_015 Task 2)
     {"type":"stopped"}
     {"type":"error","code":"...","message":"..."}
 -->
@@ -103,8 +104,17 @@ input[type=text], input[type=url] {
 }
 .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
 .indicators { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+/* TASK_MEE_015 Task B: channel status indicators */
+.indicator { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  border-radius: 10px; font-size: 11px; transition: background 0.3s, color 0.3s; }
+.indicator.on { background: #2a5a2a; color: #6f6; }
+.indicator.muted { background: #333; color: var(--muted); }
+#scenarioLabel { color: var(--muted); font-style: italic; font-size: 12px; }
 .demo-toggle { font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
 .demo-toggle input { margin-right: 4px; }
+/* TASK_MEE_017 Task A: camera toggle state styles */
+.cam-toggle-on { color: #6f6; font-weight: bold; }
+.cam-toggle-off { color: #999; text-decoration: line-through; }
 footer { margin-top: 14px; font-size: 12px; color: var(--muted); }
 code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 </style>
@@ -122,7 +132,7 @@ code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12p
         <span id="connStatus"><b>Disconnected</b> — configure and connect</span>
       </div>
       <div class="row">
-        <input type="url" id="serverUrl" placeholder="wss://&lt;host&gt;:8910  (or ws://localhost:8910)" spellcheck="false">
+        <input type="url" id="serverUrl" placeholder="wss://meews.deepsim.ai:8443  (or ws://localhost:8910)" spellcheck="false">
         <button id="btnConnect">Connect</button>
         <button id="btnDisconnect" disabled>Disconnect</button>
       </div>
@@ -131,6 +141,20 @@ code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12p
       </div>
       <div class="row">
         <label class="demo-toggle"><input type="checkbox" id="demoMode"> Demo mode (no backend, fake results)</label>
+      </div>
+      <!-- TASK_MEE_015 (re-fix): mute the mic by default. The voice pipeline is
+           expensive on the Jetson (~12 s per inference on CPU); streaming 20 ms
+           chunks non-stop floods the server and, before the offload fix, blocked
+           its event loop and killed the connection. Check this only if you have a
+           working mic and want live voice emotion. -->
+      <div class="row">
+        <label class="demo-toggle"><input type="checkbox" id="micMuted" checked> Mute microphone (recommended unless you have a working mic)</label>
+      </div>
+      <!-- TASK_MEE_017 Task A: Camera On/Off Toggle — isolate camera testing
+           from voice so users can read facial emotions without the voice
+           pipeline flooding the display. -->
+      <div class="row">
+        <label class="demo-toggle"><input type="checkbox" id="camToggle" checked> 📷 <span id="camToggleLabel" class="cam-toggle-on">Camera ON</span></label>
       </div>
       <div id="connBanner" class="status-banner"></div>
     </div>
@@ -149,6 +173,12 @@ code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12p
         <span id="latencyLabel">Latency: —</span>
       </div>
       <div id="streamBanner" class="status-banner"></div>
+      <!-- TASK_MEE_015 Task B: scenario-aware channel indicators -->
+      <div id="channelStatus" style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+        <span id="camIndicator" class="indicator muted">📷 Camera</span>
+        <span id="micIndicator" class="indicator muted">🎤 Mic</span>
+        <span id="scenarioLabel">⏳ waiting for input</span>
+      </div>
     </div>
   </div>
 
@@ -193,6 +223,42 @@ code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12p
 <script>
 "use strict";
 // ============================================================================
+// TASK_MEE_031 (2026-09-27): auto-configure WS URL when served from the
+// Tailscale Funnel host (wss://<host>/).  The access token is delivered
+// out-of-band by the operator and typed into the field manually — no
+// auto-fetch.  Manual entry in the form always wins.
+// ============================================================================
+function funnelAutoConfig() {
+  try {
+    const host = location.hostname;
+    if (!host) return;
+    const urlEl = $("serverUrl"), tokEl = $("token");
+    if (!urlEl) return;
+    const isFunnel = /\.ts\.net$/.test(host) || host.endsWith(".ts.net");
+    // TASK_MEE_035 (2026-10-16): the MEE WS is now served on its own public
+    // host (meews.deepsim.ai:8443) via the Pangolin/gerbil tunnel.  The old
+    // Tailscale-Funnel default (jetson-agx.tail0d394d.ts.net) is dead.
+    const MEE_WS_PUBLIC = "wss://meews.deepsim.ai:8443/";
+    if (isFunnel) {
+      if (!urlEl.value) urlEl.value = "wss://" + host + "/";
+      // TASK_MEE_031: no auto-fetch.  The token is delivered out-of-band by
+      // the operator and typed into the field manually.
+      if (!tokEl.value) {
+        tokEl.placeholder = "Access token (from server operator)";
+      }
+    } else if (host === "localhost" || host === "127.0.0.1") {
+      if (!urlEl.value) urlEl.value = "ws://" + host + ":8910/";
+    } else if (host === "meews.deepsim.ai" || host === "mee.deepsim.ai") {
+      // We are already on the MEE public host — point the WS at meews:8443.
+      if (!urlEl.value) urlEl.value = MEE_WS_PUBLIC;
+    } else if (!urlEl.value && !/tail0d394d\.ts\.net$/.test(host)) {
+      // TASK_MEE_035: default to the verified public WS URL for any other host.
+      if (!urlEl.value) urlEl.value = MEE_WS_PUBLIC;
+    }
+  } catch (e) { /* non-fatal: user can fill the form manually */ }
+}
+
+// ============================================================================
 // TASK_MEE_014 browser client
 // ============================================================================
 const EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprised", "neutral"];
@@ -217,9 +283,41 @@ let audioNode = null;
 let audioTimer = null;
 let demoTimer = null;
 let running = false;
+let pingInterval = null;
 let latencyWindow = [];
 let lastResultCount = 0;
 let lastFps = 0;
+// TASK_MEE_015 (re-fix): user-controlled mic mute. When muted we do NOT request
+// an audio track and do NOT stream any audio — this alone stops the voice
+// pipeline from being hammered by silent 20 ms chunks.
+let micMuted = true;
+// TASK_MEE_017 Task A: camera toggle state. When OFF, no camera track is
+// requested and no frames are sent — voice-only mode becomes possible and
+// the face panel stops flashing while the voice pipeline is slow.
+let camEnabled = true;
+
+// TASK_MEE_015 Task A3: auto-reconnect with backoff. When the socket drops
+// for reasons OTHER than auth failure, retry up to RECONNECT_MAX_ATTEMPTS
+// times (2,5,10,20,30 s backoff) so the user sees "Reconnecting…" instead of
+// the dead-end "Check URL/token and reconnect" message.
+let userDisconnect = false;
+let authFailed = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let pendingAuth = null;  // {url, token} to reuse for automatic reconnection
+// TASK_MEE_033 (2026-09-28): the 1006 "Disconnected (5/5)" hard-stop was a
+// false failure — a 1006 is always a transient network/proxy drop, not an
+// auth problem.  Raise the attempt cap to 12 and add a slow-infinite retry
+// loop so the client never gives up on a 1006.  Auth failures (bad_token,
+// bad_auth) still stop immediately.
+const RECONNECT_MAX_ATTEMPTS = 12;
+const RECONNECT_BACKOFF_MS = [2000, 5000, 10000, 20000, 30000, 30000, 30000, 30000, 30000, 30000, 30000, 30000];
+const RECONNECT_INFINITE_DELAY_MS = 30000; // after MAX_ATTEMPTS, keep retrying every 30 s
+
+// TASK_MEE_015 Task B: debounced channel-state tracking for scenario labels.
+let camActiveCount = 0;
+let micActiveCount = 0;
+const INDICATOR_DEBOUNCE = 3; // require 3 consecutive same-state messages to flip
 
 // ---------- UI helpers ------------------------------------------------------
 
@@ -253,6 +351,7 @@ function renderBars(containerId, scores, metaEl, metaText) {
 }
 
 function renderResult(data, source) {
+  updateIndicators(data, source);
   const overall = data.overall || {};
   $("ovEmoji").textContent = EMOJI[overall.emotion] || "😐";
   $("ovLabel").textContent = overall.emotion || "unknown";
@@ -269,15 +368,44 @@ function renderResult(data, source) {
   const trend = data.trend || "stable";
   $("trend").textContent = "trend: " + (TREND[trend] || trend);
 
-  const face = data.face || {};
-  renderBars("faceBars", face.scores, "faceMeta",
-    face.has_face
-      ? "detected · " + (face.emotion || "—") + " · " + Math.round((face.confidence || 0) * 100) + "%"
-      : "no face detected");
+  // TASK_MEE_017 (fix): declare voiceMeta so the assignment below doesn't throw
+  // a ReferenceError under "use strict". The old code assigned to an undeclared
+  // global, which crashed renderResult() exactly at the voice-panel section —
+  // leaving the default "no voice data" HTML text in place (the reported bug).
+  let voiceMeta;
 
-  let voiceMeta = "no voice data";
+  const face = data.face || {};
+  // TASK_MEE_015 Task B: distinguish "camera is streaming but no face in
+  // frame" from "camera stream is stopped / not sending" — the previous
+  // single "no face detected" string conflated the two and confused users.
+  // TASK_MEE_017 Task A: also account for the user's explicit camera toggle.
+  const camOn = $("camIndicator").classList.contains("on");
+  const faceMeta = face.has_face
+    ? "✅ detected · " + (face.emotion || "—") + " · " + Math.round((face.confidence || 0) * 100) + "%"
+    : (camEnabled && camOn ? "📷 no face in frame"
+       : (!camEnabled ? "📷 camera OFF (enable the camera toggle)" : "⏳ camera not sending"));
+  renderBars("faceBars", face.scores, "faceMeta", faceMeta);
+
+  // TASK_MEE_017 Task B2: surface a low-confidence hint when the voice
+  // pipeline returns a result with near-zero confidence — this is the
+  // signature of a format mismatch or a model defaulting to neutral, and
+  // it used to render as a silent "no voice data".
   if (data.voice) {
-    voiceMeta = (data.voice.emotion || "—") + " · " + Math.round((data.voice.confidence || 0) * 100) + "%";
+    const vConf = data.voice.confidence != null ? data.voice.confidence : 0;
+    const vEmo = data.voice.emotion || "—";
+    if (vConf < 0.01) {
+      voiceMeta = "⚠️ " + vEmo + " · " + Math.round(vConf * 100) + "% (very low confidence — check mic hardware / audio format)";
+      const vMetaEl = $("voiceMeta");
+      if (vMetaEl) vMetaEl.title = "Very low confidence (" + vConf.toFixed(4) + ") — possible audio format mismatch or model returning default.";
+    } else {
+      voiceMeta = vEmo + " · " + Math.round(vConf * 100) + "%";
+    }
+  } else if (micMuted) {
+    // TASK_MEE_015 (re-fix): mic is muted by user choice — say so, don't show
+    // the misleading "no voice data".
+    voiceMeta = "🔇 muted (turn off the mute toggle to enable)";
+  } else {
+    voiceMeta = "no voice data";
   }
   renderBars("voiceBars", (data.voice && data.voice.scores) || {}, "voiceMeta", voiceMeta);
 
@@ -295,6 +423,33 @@ function renderResult(data, source) {
   $("latencyLabel").textContent = "Latency: " + (typeof lat === "number" ? lat.toFixed(0) + " ms" : "—");
 }
 
+function updateIndicators(data, source) {
+  // Debounced channel tracking: a channel is considered "on" only after N
+  // consecutive results have reported it active, and "off" after N silent.
+  // `source` tells us which channel the server is processing THIS result
+  // from; a result from the other channel means that channel IS streaming.
+  const camSeen = (source === "frame") || (data.face && data.face.has_face !== undefined);
+  const micSeen = (source === "audio") || (data.voice !== null && data.voice !== undefined);
+  if (source === "frame") { camActiveCount = camSeen ? camActiveCount + 1 : 0; micActiveCount = 0; }
+  else if (source === "audio") { micActiveCount = micSeen ? micActiveCount + 1 : 0; camActiveCount = 0; }
+  else { camActiveCount = camSeen ? camActiveCount + 1 : 0; micActiveCount = micSeen ? micActiveCount + 1 : 0; }
+  // TASK_MEE_017 Task A: the user's camera toggle is authoritative — even if
+  // the server is sending face results, the indicator reflects the local
+  // toggle state so the user sees the intended channel mix.
+  const camOn = camEnabled && (camActiveCount >= INDICATOR_DEBOUNCE || source === "frame");
+  const micOn = micActiveCount >= INDICATOR_DEBOUNCE || source === "audio";
+  $("camIndicator").className = "indicator " + (camOn ? "on" : "muted");
+  $("micIndicator").className = "indicator " + (micOn ? "on" : "muted");
+  let scenario;
+  if (camOn && micOn) scenario = "🎬 both";
+  else if (camOn) scenario = micMuted ? "📷 face only (mic muted)" : "📷 face only";
+  else if (micOn) scenario = camEnabled ? "🎤 voice only" : "🎤 voice only (camera OFF)";
+  else scenario = !camEnabled && micMuted
+    ? "⏳ all channels off"
+    : (micMuted ? "📷 camera only (mic muted)" : "⏳ waiting");
+  $("scenarioLabel").textContent = scenario;
+}
+
 // ---------- WebSocket -------------------------------------------------------
 
 function wsUrlFromInput() {
@@ -309,17 +464,47 @@ function wsUrlFromInput() {
   return u;
 }
 
-function connect() {
-  if (running) return;
-  const url = wsUrlFromInput();
-  const token = $("token").value.trim();
-  if (!url) { setBanner($("connBanner"), "err", "Enter a server URL first."); return; }
-  if (!token) { setBanner($("connBanner"), "err", "Enter the access token first."); return; }
-  clearBanner($("connBanner"));
-  setConn("warn", "Connecting…");
+function cancelReconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+}
+
+function scheduleReconnect() {
+  // TASK_MEE_015 Task A3: only auto-reconnect when the user's credentials
+  // were already valid (auth_ok was seen) and the user did not click
+  // Disconnect.  TASK_MEE_033: never give up on a transient 1006 — after the
+  // backoff table is exhausted, keep retrying every 30 s indefinitely.
+  if (userDisconnect || authFailed || !pendingAuth) return;
+  if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+    // TASK_MEE_033: slow-infinite retry.  Keep the camera/mic warm and
+    // surface a clear "still retrying" state instead of a hard stop.
+    setConn("err", "Reconnecting… (attempt " + (reconnectAttempts + 1) + ", retrying every 30 s)");
+    setBanner($("connBanner"), "warn",
+      "Connection lost; auto-retrying every 30 s. Keep this tab open — the stream resumes automatically.");
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      reconnectAttempts++; // keep the counter visible for diagnostics
+      openSocket(pendingAuth.url, pendingAuth.token);
+    }, RECONNECT_INFINITE_DELAY_MS);
+    return;
+  }
+  const delay = RECONNECT_BACKOFF_MS[Math.min(reconnectAttempts, RECONNECT_BACKOFF_MS.length - 1)];
+  reconnectAttempts++;
+  setConn("warn", "Disconnected (code " + lastCloseCode + ") — reconnecting in " + Math.round(delay / 1000) + "s (" + reconnectAttempts + "/" + RECONNECT_MAX_ATTEMPTS + ")");
+  setBanner($("connBanner"), "warn", "Connection dropped; attempting automatic reconnect…");
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    setConn("warn", "Reconnecting… (" + reconnectAttempts + "/" + RECONNECT_MAX_ATTEMPTS + ")");
+    openSocket(pendingAuth.url, pendingAuth.token);
+  }, delay);
+}
+
+let lastCloseCode = 1006;
+
+function openSocket(url, token) {
+  // TASK_MEE_015 Task A3: extract socket creation from connect() so the
+  // auto-reconnect path can reuse it with the same credentials.
   try { ws = new WebSocket(url); }
   catch (e) { setConn("err", "Invalid URL"); setBanner($("connBanner"), "err", String(e)); return; }
-  const t0 = Date.now();
   ws.onopen = () => {
     ws.send(JSON.stringify({ type: "auth", token }));
   };
@@ -327,34 +512,85 @@ function connect() {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === "auth_ok") {
+      // Successful (re)connect — clear any reconnect state.
+      reconnectAttempts = 0;
+      authFailed = false;
+      cancelReconnect();
       setConn("ok", "Connected");
       clearBanner($("connBanner"));
     } else if (msg.type === "result") {
       renderResult(msg.data || {}, msg.source);
     } else if (msg.type === "error") {
+      if (msg.code === "rate_limited") {
+        // TASK_MEE_032 (2026-09-28): the server deliberately caps frame rate
+        // (max_fps); dropped frames are expected overflow, not a failure.
+        // Keep the "Connected" state; never flip the banner to warning.
+        return;
+      }
       setConn("warn", "Connected — server error");
       setBanner($("connBanner"), "warn", msg.code + ": " + msg.message);
       if (msg.code === "bad_token" || msg.code === "bad_auth") {
+        // Auth failure: never auto-reconnect with the same token.
+        authFailed = true;
         setConn("err", "Auth failed");
         stopAll(true);
       }
     } else if (msg.type === "pong") {
       // no-op (liveness only)
+    } else if (msg.type === "heartbeat") {
+      // TASK_MEE_015 Task 2: server keepalive frame; treat as liveness proof.
+      if (reconnectTimer) { cancelReconnect(); }
     }
   };
   ws.onerror = () => { /* onclose will fire */ };
   ws.onclose = (ev) => {
-    setConn("err", "Disconnected (code " + ev.code + ")");
-    setBanner($("connBanner"), "err", "Connection closed. Check URL/token and reconnect.");
-    stopAll(true);
+    lastCloseCode = ev.code;
+    if (userDisconnect) return;
+    if (authFailed || ev.code === 1008) {
+      // Auth failure is terminal for this credential set — stop streaming and
+      // do NOT auto-reconnect with the same token.
+      setConn("err", "Auth failed (code " + ev.code + ")");
+      setBanner($("connBanner"), "err", "Authentication failed — check the token.");
+      stopAll(true);
+      return;
+    }
+    // TASK_MEE_015 (re-fix): unexpected drop. Do NOT tear down the camera/mic
+    // here — keep the capture loops running so they resume sending the moment
+    // the socket reconnects (they re-check `ws` on every frame). Only the
+    // connection state is reset. This is what makes "first reconnect
+    // successful, second not" impossible: the stream survives the blip.
+    setConn("err", "Disconnected (code " + ev.code + ") — will auto-reconnect");
+    setBanner($("connBanner"), "warn", "Connection dropped; reconnecting… (camera/mic stay on)");
+    scheduleReconnect();
   };
 }
 
+function connect() {
+  if (running) return;
+  const url = wsUrlFromInput();
+  const token = $("token").value.trim();
+  if (!url) { setBanner($("connBanner"), "err", "Enter a server URL first."); return; }
+  if (!token) { setBanner($("connBanner"), "err", "Enter the access token first."); return; }
+  clearBanner($("connBanner"));
+  userDisconnect = false;
+  authFailed = false;
+  reconnectAttempts = 0;
+  cancelReconnect();
+  // Remember credentials for automatic reconnection (in-memory only; the
+  // token never persists to localStorage).
+  pendingAuth = { url, token };
+  setConn("warn", "Connecting…");
+  openSocket(url, token);
+}
+
 function disconnect() {
+  userDisconnect = true;       // suppress auto-reconnect
+  cancelReconnect();
   if (ws) {
     try { ws.close(1000, "user disconnect"); } catch {}
     ws = null;
   }
+  pendingAuth = null;
   stopAll(true);
   setConn("off", "Disconnected");
 }
@@ -369,32 +605,137 @@ async function startStream() {
     return;
   }
   clearBanner($("streamBanner"));
-  let videoOk = false, audioOk = false;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 } },
-      audio: { sampleRate: 16000, echoCancellation: true },
-    });
-  } catch (e) {
-    setBanner($("streamBanner"), "err", "Permission denied or no devices: " + e.name);
+  micMuted = $("micMuted").checked;
+  camEnabled = $("camToggle").checked;
+  if (!camEnabled && micMuted) {
+    setBanner($("streamBanner"), "err", "Camera OFF + mic muted = nothing to stream. Enable at least one channel.");
     return;
   }
-  // Video preview
-  const video = $("preview");
-  video.srcObject = stream;
-  for (const track of stream.getVideoTracks()) {
-    $("camDot").className = "dot ok";
+  let videoOk = false, audioOk = false;
+  let constraints;
+  if (camEnabled && !micMuted) {
+    // Both channels — one stream, both tracks.
+    constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: { sampleRate: 16000, echoCancellation: true } };
+  } else if (camEnabled && micMuted) {
+    // Camera only.
+    constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 } } };
+  } else {
+    // Voice only — no camera.
+    constraints = { audio: { sampleRate: 16000, echoCancellation: true } };
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (e) {
+    // If requesting the mic failed (no device / denied) but the user wanted it,
+    // retry with camera-only so the face demo still works.
+    if (!micMuted) {
+      setBanner($("streamBanner"), "warn", "Mic unavailable (" + e.name + ") — continuing camera-only.");
+      micMuted = true;
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } } }); }
+      catch (e2) { setBanner($("streamBanner"), "err", "Permission denied or no devices: " + e2.name); return; }
+    } else {
+      setBanner($("streamBanner"), "err", "Permission denied or no devices: " + e.name);
+      return;
+    }
+  }
+  // TASK_MEE_017 Task A: only attach a video element / start the frame
+  // capture loop when the camera is actually on. In voice-only mode there
+  // is no video track to display and nothing to send.
+  const hasVideo = camEnabled && stream.getVideoTracks().length > 0;
+  const hasAudio = !micMuted && stream.getAudioTracks().length > 0;
+  if (hasVideo) {
+    const video = $("preview");
+    video.srcObject = stream;
+    for (const track of stream.getVideoTracks()) {
+      $("camDot").className = "dot ok";
+    }
+  } else {
+    $("preview").srcObject = null;
+    $("preview").style.display = "none";
+    $("camDot").className = "dot off";
   }
   // Start capture loops
   running = true;
   $("btnStart").disabled = true;
   $("btnStop").disabled = false;
-  startCaptureLoop();
-  startAudioLoop();
-  for (const track of stream.getAudioTracks()) {
-    $("micDot").className = "dot ok";
+  if (hasVideo) startCaptureLoop();
+  if (hasAudio) {
+    startAudioLoop();
+    for (const track of stream.getAudioTracks()) { $("micDot").className = "dot ok"; }
+  } else {
+    $("micDot").className = "dot off";
+    // TASK_MEE_015 (re-fix): tell the server the mic is muted so it stops the
+    // voice channel and the UI shows "voice muted", not "no voice data".
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "mute", audio: true }));
   }
-  setBanner($("streamBanner"), "ok", "Streaming camera + microphone to MEE.");
+  startPingLoop();
+  // TASK_MEE_017 Task A: banner reflects the actual active channel mix.
+  const bannerText = hasVideo && hasAudio
+    ? "Streaming camera + microphone to MEE."
+    : hasVideo
+      ? "Streaming camera to MEE (mic muted)."
+      : "Streaming microphone to MEE (camera OFF).";
+  setBanner($("streamBanner"), "ok", bannerText);
+}
+
+function toggleCameraLive() {
+  // TASK_MEE_017 Task A: stop / start just the camera track mid-session.
+  // The mic keeps streaming untouched (its ScriptProcessor graph is
+  // independent). Only valid while a stream exists (running mode).
+  if (!stream) return;
+  const tracks = stream.getVideoTracks();
+  if (!camEnabled) {
+    // Camera turning ON: add a video track (getUserMedia on the existing
+    // stream is not possible; request a fresh video stream and swap it in).
+    navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } } })
+      .then((newStream) => {
+        // Attach the new track to the current stream object so the capture
+        // loop sees it. Old audio tracks stay; old video tracks are dropped.
+        for (const t of tracks) t.stop();
+        const nt = newStream.getVideoTracks()[0];
+        nt.enabled = true;
+        // We can't addTrack to the live stream directly across browsers,
+        // so replace the entire stream object and reattach audio tracks.
+        const audioTracks = stream.getAudioTracks();
+        for (const t of audioTracks) t.stop();
+        for (const t of newStream.getTracks()) t.stop();
+        // Simpler and more reliable: rebuild the combined stream by
+        // re-requesting whatever channels are currently on.
+        const wantVideo = true;
+        const wantAudio = !micMuted && stream.getAudioTracks().length > 0;
+        const c = { video: { width: { ideal: 640 }, height: { ideal: 480 } } };
+        if (wantAudio) c.audio = { sampleRate: 16000, echoCancellation: true };
+        return navigator.mediaDevices.getUserMedia(c).then((s2) => {
+          stream = s2;
+          $("preview").style.display = "";
+          $("preview").srcObject = stream;
+          $("camDot").className = "dot ok";
+          if (!captureTimer) startCaptureLoop();
+          if (wantAudio && !audioNode) startAudioLoop();
+          setBanner($("streamBanner"), "ok", "Camera back ON — streaming to MEE.");
+        });
+      })
+      .catch((e) => setBanner($("streamBanner"), "err", "Failed to re-enable camera: " + e.name));
+  } else {
+    // Camera turning OFF: stop the video track and the capture loop, leave
+    // the audio graph untouched.
+    for (const t of tracks) t.stop();
+    $("preview").srcObject = null;
+    $("preview").style.display = "none";
+    $("camDot").className = "dot off";
+    if (captureTimer) { clearInterval(captureTimer); captureTimer = null; }
+    $("fpsLabel").textContent = "FPS: —";
+    const stillHasAudio = !micMuted && stream.getAudioTracks().length > 0;
+    if (!stillHasAudio) {
+      // Nothing left to stream — stop the session cleanly.
+      for (const t of stream.getTracks()) t.stop();
+      stream = null;
+      stopStream();
+      setBanner($("streamBanner"), "warn", "Camera OFF + mic muted → test stopped.");
+    } else {
+      setBanner($("streamBanner"), "ok", "Camera OFF — streaming microphone to MEE only.");
+    }
+  }
 }
 
 function stopStream() {
@@ -409,6 +750,7 @@ function stopStream() {
     stream = null;
   }
   $("preview").srcObject = null;
+  $("preview").style.display = "";  // TASK_MEE_017 Task A: restore display
   $("fpsLabel").textContent = "FPS: —";
 }
 
@@ -419,7 +761,21 @@ function stopLoops() {
   if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
 }
 
+function stopPingLoop() {
+  if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+}
+
+function startPingLoop() {
+  // Keep Tailscale Funnel alive — its HTTP/2 idle timeout kills WS after ~60s.
+  pingInterval = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "ping" }));
+    }
+  }, 15000);
+}
+
 function stopAll(silent) {
+  stopPingLoop();
   stopStream();
   if (!silent) setBanner($("streamBanner"), "", "");
 }
@@ -431,12 +787,22 @@ _canvas.width = 640; _canvas.height = 480;
 const _ctx = _canvas.getContext("2d");
 
 function startCaptureLoop() {
+  // TASK_MEE_032 (2026-09-28): throttle to ~10 fps.  The server caps frames
+  // at 15 fps (token bucket); sending at ~10 fps keeps us under the cap with
+  // headroom for timer jitter, so frames are no longer dropped as
+  // rate_limited — lighter on the Jetson and no error spam.
+  const FRAME_INTERVAL_MS = 100; // ~10 FPS
+  const MIN_SEND_GAP_MS = 90;   // extra guard: never send closer than this
+  let lastSent = 0;
   captureTimer = setInterval(() => {
     if (!stream) return;
     const videoTrack = stream.getVideoTracks()[0];
     if (!videoTrack || videoTrack.readyState !== "live") return;
     const video = $("preview");
     if (video.readyState < 2) return;
+    const now = performance.now();
+    if (now - lastSent < MIN_SEND_GAP_MS) return; // drop this tick
+    lastSent = now;
     try {
       _ctx.drawImage(video, 0, 0, _canvas.width, _canvas.height);
       _canvas.toBlob((blob) => {
@@ -449,12 +815,16 @@ function startCaptureLoop() {
         reader.readAsDataURL(blob, "image/jpeg", 0.7);
       }, "image/jpeg", 0.7);
     } catch (e) { /* frame failed — ignore */ }
-  }, 67); // ~15 FPS
+  }, FRAME_INTERVAL_MS); // ~10 FPS
   const fpsTick = setInterval(() => { lastFps++; }, 1000);
   setInterval(() => { $("fpsLabel").textContent = "FPS: " + lastFps; lastFps = 0; }, 1000);
 }
 
 function startAudioLoop() {
+  // TASK_MEE_017 (fix): guard against a second call (e.g. re-enabling the
+  // camera mid-session) so we don't build a second ScriptProcessor graph on
+  // the same AudioContext and leak the first.
+  if (audioNode) return;
   // Use AudioContext + ScriptProcessor (deprecated but universal) to
   // capture raw PCM samples and stream them as base64 float32 chunks.
   try {
@@ -557,8 +927,26 @@ function startDemoMode() {
 
 // ---------- wiring ----------------------------------------------------------
 
+// TASK_MEE_030: auto-fill WS URL + token when served from the funnel host.
+funnelAutoConfig();
+
 $("btnConnect").addEventListener("click", connect);
 $("btnDisconnect").addEventListener("click", disconnect);
+// TASK_MEE_017 Task A: camera toggle listener. When the test is running,
+// flip the live stream; when idle, just update state so the next
+// startStream() honors it.
+const camToggleEl = document.getElementById("camToggle");
+if (camToggleEl) camToggleEl.addEventListener("change", function() {
+  camEnabled = this.checked;
+  const label = document.getElementById("camToggleLabel");
+  if (label) {
+    label.textContent = this.checked ? "Camera ON" : "Camera OFF";
+    label.className = this.checked ? "cam-toggle-on" : "cam-toggle-off";
+  }
+  if (running && stream && !$("demoMode").checked) {
+    toggleCameraLive();
+  }
+});
 $("btnStart").addEventListener("click", startStream);
 $("btnStop").addEventListener("click", () => {
   if (demoTimer) { stopAll(false); setBanner($("streamBanner"), "ok", "Demo mode stopped."); return; }

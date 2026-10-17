@@ -501,3 +501,84 @@ def test_jetson_vision_inference_runs():
     # Output must be structurally valid regardless of face detection result
     assert hasattr(result, "emotion")
     assert hasattr(result, "has_face")
+
+
+# ---------------------------------------------------------------------------
+# TASK_MEE_016: MediaPipe Face Detection backend (Jetson AGX Orin CPU path)
+# ---------------------------------------------------------------------------
+
+def test_mee016_mediapipe_detector_instantiable():
+    """TASK_MEE_016 A2: MediaPipeFaceDetector instantiates without error."""
+    from mee.vision.detector import MediaPipeFaceDetector
+    det = MediaPipeFaceDetector(min_detection_confidence=0.5)
+    assert det is not None
+
+
+def test_mee016_mediapipe_detect_returns_face_list():
+    """TASK_MEE_016 A3 (structural): detect() on a synthetic frame returns a
+    list (empty for an all-zeros frame). MediaPipe itself has already been
+    smoke-verified at install time; here we only check the wrapper contract.
+    """
+    from mee.vision.detector import MediaPipeFaceDetector
+    det = MediaPipeFaceDetector(min_detection_confidence=0.5)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    faces = det.detect(frame)
+    assert isinstance(faces, list)
+
+
+def test_mee016_mediapipe_detect_rejects_non_array():
+    """detect() must return [] for non-array input (contract with other backends)."""
+    from mee.vision.detector import MediaPipeFaceDetector
+    det = MediaPipeFaceDetector(min_detection_confidence=0.5)
+    assert det.detect(None) == []
+    assert det.detect("not-an-array") == []
+
+
+def test_mee016_face_detector_autoselect_mediapipe_when_cuda_unavailable():
+    """TASK_MEE_016 B1: when torch.cuda.is_available() is False (this host
+    = Jetson AGX Orin with cu130 PyTorch + cu12.x driver), FaceDetector
+    auto-selects the MediaPipe CPU backend.
+    """
+    from mee.vision.detector import FaceDetector
+    det = FaceDetector()  # use_mediapipe=None → auto
+    assert det.model_type == "mediapipe", (
+        f"expected auto-select to prefer mediapipe on this host, got {det.model_type}"
+    )
+
+
+def test_mee016_face_detector_explicit_use_mediapipe():
+    """Explicit use_mediapipe=True forces the MediaPipe backend."""
+    from mee.vision.detector import FaceDetector
+    det = FaceDetector(use_mediapipe=True)
+    assert det.model_type == "mediapipe"
+
+
+def test_mee016_face_detector_forced_mediapipe_on_no_face_frame():
+    """detect() must still return [] (not raise) on a synthetic no-face frame."""
+    from mee.vision.detector import FaceDetector
+    det = FaceDetector(use_mediapipe=True)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    assert det.detect(frame) == []
+
+
+def test_mee016_processor_threads_use_mediapipe():
+    """VisionProcessor exposes use_mediapipe and forwards it to the detector."""
+    from mee.vision.processor import VisionProcessor
+    vp = VisionProcessor(use_mediapipe=True)
+    assert vp._detector.model_type == "mediapipe"
+
+
+def test_mee016_meeconfig_has_use_mediapipe():
+    """MEEConfig exposes use_mediapipe with default None (= auto)."""
+    from mee.api.engine import MEEConfig
+    cfg = MEEConfig()
+    assert cfg.use_mediapipe is None
+    cfg2 = MEEConfig(use_mediapipe=True)
+    assert cfg2.use_mediapipe is True
+
+
+def test_mee016_mediapipe_detector_is_available():
+    """MediaPipeFaceDetector.is_available() must reflect mediapipe importability."""
+    from mee.vision.detector import MediaPipeFaceDetector
+    # On this host mediapipe is installed (verified at install time).
+    assert MediaPipeFaceDetector.is_available() is True
