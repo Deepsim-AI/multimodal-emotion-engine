@@ -107,6 +107,11 @@ multimodal-emotion-engine/
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design documentation.
 
+**Model weights** are stored outside the repo (in `~/.emotiefflib/`,
+`~/.insightface/`, and the MediaPipe pip package). See
+[`docs/MODELS.md`](docs/MODELS.md) for the full layout — which models are
+active vs research/legacy — and how to reproduce or remove them.
+
 ## Limitations & Disclaimer
 
 - **Emotion estimates are probabilistic**, not psychological assessments. They represent statistical inferences from facial expressions and vocal characteristics — they do not "read true emotion."
