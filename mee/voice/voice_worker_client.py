@@ -33,11 +33,13 @@ class VoiceWorkerClient:
     def __init__(self, module: str = "mee.voice.voice_worker",
                  python: Optional[str] = None,
                  cwd: Optional[str] = None,
-                 ready_timeout: float = 60.0):
+                 ready_timeout: float = 60.0,
+                 model_path: Optional[str] = None):
         self._module = module
         self._python = python or sys.executable
         self._cwd = cwd
         self._ready_timeout = ready_timeout
+        self._model_path = model_path
         self._lock = threading.Lock()
         self._proc: Optional[subprocess.Popen] = None
         self._ready = False
@@ -55,6 +57,11 @@ class VoiceWorkerClient:
             self._started = True
             try:
                 env = dict(os.environ)
+                # 2026-10-17: point the worker at the canonical models/voice
+                # tree (models/vision_emotion analog). The worker reads this
+                # to build its EmotionModel.
+                if self._model_path:
+                    env["MEE_VOICE_MODEL_PATH"] = self._model_path
                 # The worker imports the `mee` package — make sure the repo
                 # root is on PYTHONPATH regardless of the caller's cwd.
                 repo = os.path.dirname(os.path.dirname(os.path.dirname(

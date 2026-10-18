@@ -383,30 +383,44 @@ async def test_roundtrip_frame_and_audio(server, cfg):
     uri = f"ws://127.0.0.1:{port}"
     try:
         async with websockets.connect(uri) as ws:
+            # 2026-10-17: the server emits a periodic keepalive heartbeat (~15s);
+            # skip it so a heartbeat landing between send() and recv() doesn't
+            # get mistaken for the application reply (pre-existing race).
+            async def _recv_result(ws, want):
+                while True:
+                    msg = json.loads(await ws.recv())
+                    if msg.get("type") == "heartbeat":
+                        continue
+                    assert msg.get("type") == want, f"expected {want!r}, got {msg!r}"
+                    return msg
+
             # Auth
             await ws.send(json.dumps({"type": "auth", "token": cfg.token}))
-            auth_ok = json.loads(await ws.recv())
+            auth_ok = await _recv_result(ws, "auth_ok")
             assert auth_ok["type"] == "auth_ok"
 
             # Frame
             raw = _make_jpeg()
             await ws.send(json.dumps({"type": "frame", "data": _b64(raw)}))
-            res = json.loads(await ws.recv())
+            res = await _recv_result(ws, "result")
             assert res["type"] == "result"
             assert res["source"] == "frame"
             assert res["data"]["face"]["emotion"] == "happy"
             assert "latency_ms" in res["data"]
 
-            # Audio
-            samples = np.zeros(320, dtype="<f4")
+            # Audio — the server buffers until AUDIO_INFERENCE_SAMPLES (~2 s @16 kHz)
+            # before running inference (TASK_MEE_017). Send a full segment so a
+            # "result" reply is produced (pre-existing stale test sent only 320 samples
+            # and blocked on recv() forever).
+            samples = np.zeros(16000, dtype="<f4")
             await ws.send(json.dumps({"type": "audio", "data": _b64(samples.tobytes())}))
-            res2 = json.loads(await ws.recv())
+            res2 = await _recv_result(ws, "result")
             assert res2["type"] == "result"
             assert res2["source"] == "audio"
 
             # Ping / pong
             await ws.send(json.dumps({"type": "ping"}))
-            pong = json.loads(await ws.recv())
+            pong = await _recv_result(ws, "pong")
             assert pong["type"] == "pong"
     finally:
         server_task.cancel()

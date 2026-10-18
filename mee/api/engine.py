@@ -22,18 +22,58 @@ from ..state.history import EmotionHistory
 from ..state.estimator import TrendConfig, analyze_trend
 
 
+def _repo_root() -> str:
+    """The repo root (parent of the ``mee/`` package).
+
+    ``engine.py`` lives at ``<repo>/mee/api/engine.py`` — three dirs up.
+    """
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _default_model_root() -> Optional[str]:
+    """Default models root: ``<repo>/models`` if it exists, else None."""
+    env = os.environ.get("MEE_MODEL_ROOT")
+    if env:
+        return env
+    cand = os.path.join(_repo_root(), "models")
+    return cand if os.path.isdir(cand) else None
+
+
+def _sub_model_dir(name: str) -> Optional[str]:
+    """Resolve a canonical subfolder (e.g. ``voice``) under the models root,
+    or None if the models root is unset/missing (so the backend falls back to
+    its own default location)."""
+    root = _default_model_root()
+    if not root:
+        return None
+    cand = os.path.join(root, name)
+    return cand if os.path.isdir(cand) else None
+
+
 @dataclass
 class MEEConfig:
-    """V1 configuration — all defaults work without user input."""
+    """V1 configuration — all defaults work without user input.
+
+    2026-10-17: model weights default to the canonical ``<repo>/models/``
+    tree (populated by ``tools/download_models.py``) instead of the scattered
+    per-library home caches. Override with ``MEE_MODEL_ROOT`` or by passing an
+    explicit ``vision_model_path`` / ``voice_model_path``.
+    """
     fusion_weights: dict = field(default_factory=lambda: {"vision": 0.5, "voice": 0.5})
     conflict_threshold: float = 0.5
     trend_window: int = 30
     trend_min_samples: int = 5
-    vision_model_path: Optional[str] = None
+    # Canonical models root — <repo>/models/ by default.
+    model_root: Optional[str] = field(default_factory=_default_model_root)
+    vision_model_path: Optional[str] = field(default_factory=lambda: (
+        os.environ.get("MEE_VISION_MODEL_PATH") or _sub_model_dir("vision_emotion")
+    ))
     face_confidence_threshold: float = 0.7
     detect_every_n_frames: Optional[int] = None  # TASK_MEE_013 Task 2: 1=every pass (default); n>1 reuses detection for n passes
     use_mediapipe: Optional[bool] = None  # TASK_MEE_016 Task C: None=auto (CUDA-driven); True=force MediaPipe CPU; False=force legacy chain
-    voice_model_path: Optional[str] = None
+    voice_model_path: Optional[str] = field(default_factory=lambda: (
+        os.environ.get("MEE_VOICE_MODEL_PATH") or _sub_model_dir("voice")
+    ))
     # 2026-10-16: On this Jetson host, loading the SpeechBrain/torch voice
     # runtime in the same process as the MediaPipe vision runtime segfaults
     # (native C-runtime collision — verified: each works alone, combined load
@@ -156,6 +196,8 @@ class EmotionEngine:
                 from ..voice.voice_worker_client import VoiceWorkerClient
                 self._voice_worker = VoiceWorkerClient(
                     cwd=os.environ.get("MEE_REPO_ROOT") or None,
+                    # 2026-10-17: canonical models/voice tree (resolver layer).
+                    model_path=self.config.voice_model_path,
                 )
             except Exception:
                 self._voice_worker = None

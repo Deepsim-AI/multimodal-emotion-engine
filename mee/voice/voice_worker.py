@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import sys
 import warnings
 
@@ -43,8 +44,16 @@ def main() -> None:
     import numpy as np
 
     from mee.voice.processor import VoiceProcessor
+    from mee.voice.emotion_model import EmotionModel
 
-    vp = VoiceProcessor()
+    # 2026-10-17: honor the canonical models/ tree. The engine exports
+    # MEE_VOICE_MODEL_PATH (default <repo>/models/voice) into this worker's
+    # environment; fall back to VoiceProcessor's own default if unset.
+    model_path = os.environ.get("MEE_VOICE_MODEL_PATH") or None
+    if model_path:
+        vp = VoiceProcessor(emotion_model=EmotionModel(model_path=model_path))
+    else:
+        vp = VoiceProcessor()
     backend = getattr(getattr(vp, "_emotion", None), "_backend", None) or "unknown"
     _emit({"type": "ready", "backend": backend, "available": bool(vp.available)})
 

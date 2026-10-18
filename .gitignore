@@ -14,11 +14,31 @@ venv/
 # OS
 .DS_Store
 
-# Large model files - do not commit (regenerate with tools/export_models.py)
+# Large model files - do not commit (regenerate with tools/download_models.py)
 models/*.pth
 models/*.pt
 models/safetensors/
 wav2vec2_checkpoints/
+
+# 2026-10-17: canonical models/ tree — weights are pulled by tools/download_models.py,
+# NOT committed. Keep README + the small ONNX graph; ignore the rest.
+models/**
+!models/README.md
+!models/voice/
+!models/voice/emotion_iemocap.onnx
+!models/voice_gpu/
+!models/voice_gpu/emotion_iemocap.onnx
+!models/exported/
+!models/exported/emotion_iemocap.onnx
+# Explicitly-ignore the large binaries inside the whitelisted dirs (belt + suspenders)
+models/**/*.onnx.data
+models/voice/*.ckpt
+models/voice/*.wav
+models/voice/*.py
+models/voice/*.yaml
+models/voice/*.txt
+models/vision_emotion/*.onnx
+models/vision_emotion/*.pt
 
 # Binary data (ONNX data splits, too large for git)
 *.onnx.data

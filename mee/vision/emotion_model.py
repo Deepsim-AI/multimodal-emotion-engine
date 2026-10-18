@@ -96,12 +96,56 @@ class EmotionModel:
         """
         Args:
             model_path: optional explicit ONNX model path (advanced).
+                Accepts either a full path to a weights file
+                (``.../enet_b0_8_best_vgaf.onnx``) or a directory containing
+                it (the canonical ``models/vision_emotion/`` layout).
+                EmotiEffLib hardcodes its cache to ``~/.emotiefflib/`` and
+                offers no env override, so we stage the file there first.
             model_name: optional EmotiEffLib model name (default enet_b0_8_best_vgaf).
         """
         self._model_name = model_name or "enet_b0_8_best_vgaf"
         self._model_path = model_path
         self._recognizer = None
         self._ready = False
+
+    def _stage_weights(self) -> None:
+        """Copy/symlink an explicit ``model_path`` into EmotiEffLib's
+        hardcoded ``~/.emotiefflib/`` cache (which has no env override).
+
+        Idempotent: if the target already exists with the same content it is
+        left alone; if it is a stale/different file it is replaced.
+        """
+        if not self._model_path:
+            return
+        import shutil as _sh
+        from pathlib import Path as _Path
+        src = _Path(self._model_path).expanduser()
+        # model_path may be a directory (models/vision_emotion/) or a file.
+        candidates = []
+        if src.is_dir():
+            candidates = [src / (self._model_name + ext)
+                          for ext in (".onnx", ".pt")]
+        elif src.is_file():
+            candidates = [src]
+        cache_dir = _Path(_Path.home()) / ".emotiefflib"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        for cand in candidates:
+            if not cand.exists():
+                continue
+            dest = cache_dir / cand.name
+            if dest.exists() and not dest.is_symlink():
+                # Real file already there — verify it matches; replace if not.
+                if dest.stat().st_size == cand.stat().st_size:
+                    continue
+            if dest.is_symlink():
+                dest.unlink()
+            elif dest.exists():
+                dest.unlink()
+            try:
+                dest.symlink_to(cand)
+            except OSError:
+                _sh.copy2(cand, dest)
+        return
 
     # -- availability ------------------------------------------------------
     @property
@@ -110,7 +154,11 @@ class EmotionModel:
 
     @staticmethod
     def is_available() -> bool:
-        return _EMOTIEFF_AVAILABLE
+        try:
+            import emotiefflib  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     @property
     def model_type(self) -> str:
@@ -128,6 +176,7 @@ class EmotionModel:
         if not _EMOTIEFF_AVAILABLE:
             return False
         try:
+            self._stage_weights()
             # ONNX runtime path — lightweight, no torch dependency at inference.
             # EmotiEffLibRecognizer is a factory function:
             #   EmotiEffLibRecognizer(engine="onnx", model_name=..., device=...)
