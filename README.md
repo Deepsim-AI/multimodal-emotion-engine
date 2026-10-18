@@ -107,10 +107,14 @@ multimodal-emotion-engine/
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design documentation.
 
-**Model weights** are stored outside the repo (in `~/.emotiefflib/`,
-`~/.insightface/`, and the MediaPipe pip package). See
-[`docs/MODELS.md`](docs/MODELS.md) for the full layout — which models are
-active vs research/legacy — and how to reproduce or remove them.
+**Model weights** live in a single canonical tree inside the repo —
+[`models/`](models/README.md) (`models/vision_emotion/`, `models/voice/`,
+`models/voice_gpu/`). On a fresh host, populate it with
+`python3 tools/download_models.py`. The engine resolves these paths directly
+(resolver layer; env `MEE_MODEL_ROOT` / `MEE_VISION_MODEL_PATH` /
+`MEE_VOICE_MODEL_PATH` override). See
+[`docs/MODELS.md`](docs/MODELS.md) for the full layout, the resolver layer, and
+the MediaPipe pip package that ships vision face-detection.
 
 ## Limitations & Disclaimer
 

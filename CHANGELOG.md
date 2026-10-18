@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+**Model Storage Consolidated to a Canonical `models/` Tree + Resolver Layer (2026-10-17):**
+- All production weights now live under `<repo>/models/` (`vision_emotion/`, `voice/`, `voice_gpu/`) — no longer scattered per-library home caches (`~/.emotiefflib/`, `~/.insightface/...`).
+- `tools/download_models.py` (new) — one command populates + verifies `models/` on a fresh host (idempotent; `--mirror` copies existing local weights; `--link` restores legacy backend symlinks).
+- `mee/api/engine.py` — `MEEConfig` defaults resolve `model_root`/`vision_model_path`/`voice_model_path` to the canonical tree (helpers `_default_model_root`/`_sub_model_dir`; env `MEE_MODEL_ROOT` / `MEE_VISION_MODEL_PATH` / `MEE_VOICE_MODEL_PATH` override; falls back to `None` if the dir is absent).
+- `mee/vision/emotion_model.py` — `_stage_weights()` stages an explicit `model_path` into EmotiEffLib's hardcoded `~/.emotiefflib/` cache (which has no env override) before load.
+- `mee/voice/voice_worker_client.py` — accepts `model_path`, exports `MEE_VOICE_MODEL_PATH` into the worker env; `mee/voice/voice_worker.py` builds the `EmotionModel` from it.
+- `docs/MODELS.md` + `models/README.md` — canonical layout + resolver layer; `README.md`, `docs/JETSON_DEPLOYMENT.md`, `PROJECT_STATUS.md` updated to the new layout.
+- `.gitignore` — keeps `models/README.md` + the small ONNX graph; ignores weight binaries.
+
 **Remote Demo — Voice in a Separate Worker Process + Mic-Silence Diagnostics (2026-10-17):**
 - Root-caused two remote-demo voice issues: (a) the browser's `{type:"mute"}` mic-toggle message was unhandled and rendered as a `"Server error"` banner; (b) on this Jetson, loading the SpeechBrain/torch voice runtime and the MediaPipe vision runtime in the *same* process **segfaults** (native C-runtime collision — verified each works alone, combined load dumps core).
 - `mee/voice/voice_worker.py` (new) — out-of-process voice worker: loads the voice runtime, speaks newline-delimited JSON over stdin/stdout, never imports the vision stack.

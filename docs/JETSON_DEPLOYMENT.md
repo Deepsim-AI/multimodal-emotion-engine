@@ -73,8 +73,8 @@ pip install numpy psutil onnx onnxscript
 # Voice backends
 pip install speechbrain transformers
 
-# Vision
-pip install insightface
+# Vision — MediaPipe ships the face-detection model (face_landmark.tflite)
+pip install mediapipe
 
 # ONNX Runtime (CPU — always works)
 pip install onnxruntime
@@ -87,18 +87,31 @@ pip install onnxruntime
 
 ### 3.2 Download / verify model weights
 
+All production weights live in the canonical [`models/`](../../models/README.md)
+tree (populated by the tool below) — not scattered per-library home caches.
+
 ```bash
-# Vision model (already present from TASK_MEE_004)
-ls ~/.insightface/models/buffalo_l/
+# Populate models/vision_emotion/ + models/voice/ (idempotent; skips present files)
+python tools/download_models.py
 
-# SpeechBrain IEMOCAP voice model (from TASK_MEE_003)
-ls ~/.insightface/models/emotion-recognition-wav2vec2-IEMOCAP/
+# Re-check sizes / checksums
+python tools/download_models.py --verify
 
-# Wav2Vec 2.0-base fallback (from Hugging Face, auto-downloaded on first use)
-# No manual download needed
+# Resulting layout
+ls models/vision_emotion/   # enet_b0_8_best_vgaf.onnx / .pt   (vision emotion)
+ls models/voice/           # wav2vec2.ckpt + bundle           (voice emotion)
 ```
 
-### 3.3 Export voice model to ONNX
+The engine resolves these paths automatically (resolver layer). The legacy
+`insightface` / `~/.emotiefflib` home caches are no longer required; `insightface`
+(and `buffalo_l`) are **research-only** and have been removed from the active path.
+
+### 3.3 Export voice model to ONNX (optional, GPU/TensorRT)
+
+> The pre-exported ONNX graph is already in the repo at
+> `models/exported/emotion_iemocap.onnx` (the `.onnx.data` blob is gitignored and
+> staged via `tools/download_models.py --mirror`). Re-exporting is only needed if
+> you change the weights.
 
 ```bash
 # FP32 ONNX (primary)

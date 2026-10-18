@@ -53,7 +53,7 @@ None.
 
 ## Notes
 
-- insightface buffalo_l weights (~280 MB) require internet download on first use
-- SpeechBrain checkpoint (~100–200 MB) requires internet download on first use
+- Model weights live in the canonical `models/` tree; populate a fresh host with `python3 tools/download_models.py` (vision `models/vision_emotion/` ≈ 31 MB + voice `models/voice/` ≈ 377 MB)
+- `insightface` `buffalo_l` weights are **research-only and removed** from the active path (not required at runtime)
 - Licensing: All components Apache-2.0/MIT/BSD — fully commercial-safe (verify specific weight files before production release)
 - No remote repository configured yet — local commits only
