@@ -80,7 +80,7 @@ VISION_EMOTION = Model(
     key="vision_emotion",
     title="Vision emotion — EmotiEffLib enet_b0_8_best_vgaf (AffectNet)",
     backend="onnxruntime",
-    license="CC-BY-NC 4.0 (weights) — see models/LICENSE_NOTES.md",
+    license="Apache-2.0 (weights, released by SB-AI-Lab) — see docs/THIRD_PARTY_LICENSES.md",
     files=[
         File(f"{EMOTIEFF_MODEL}.onnx", url=f"{_EMOTIEFF_ONNX}/{EMOTIEFF_MODEL}.onnx",
              mirror="~/.emotiefflib/" + f"{EMOTIEFF_MODEL}.onnx", size=16039595),
@@ -102,7 +102,7 @@ VOICE = Model(
     key="voice",
     title="Voice emotion — SpeechBrain wav2vec2-IEMOCAP",
     backend="speechbrain",
-    license="Apache-2.0 — see models/LICENSE_NOTES.md",
+    license="Apache-2.0 — see docs/THIRD_PARTY_LICENSES.md",
     files=[
         File("wav2vec2.ckpt", url=f"{_VOICE_HF}/wav2vec2.ckpt", mirror=f"{_VOICE_MIRROR_DIR}/wav2vec2.ckpt", size=377575130),
         File("hyperparams.yaml", url=f"{_VOICE_HF}/hyperparams.yaml", mirror=f"{_VOICE_MIRROR_DIR}/hyperparams.yaml"),
@@ -126,7 +126,7 @@ VOICE_GPU = Model(
     key="voice_gpu",
     title="Voice emotion (GPU) — IEMOCAP ONNX for ORT/TensorRT (opt-in)",
     backend="onnxruntime-cuda/trt",
-    license="Apache-2.0 — see models/LICENSE_NOTES.md",
+    license="Apache-2.0 — see docs/THIRD_PARTY_LICENSES.md",
     files=[
         # These live in the repo already (committed graph + gitignored data).
         # No remote URL; --mirror copies from models/exported into voice_gpu.

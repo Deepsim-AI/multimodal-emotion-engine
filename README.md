@@ -39,6 +39,17 @@ pip install multimodal-emotion-engine[demo]
 pip install multimodal-emotion-engine[dev]
 ```
 
+### Download model weights
+The production weights live in the canonical `models/` tree (not shipped with the
+pip wheel). On a fresh host, populate + verify them once:
+```bash
+python3 tools/download_models.py           # vision (models/vision_emotion) + voice (models/voice)
+python3 tools/download_models.py --verify  # re-check sizes / checksums
+```
+The engine resolves `models/` automatically (resolver layer; override with
+`MEE_MODEL_ROOT` / `MEE_VISION_MODEL_PATH` / `MEE_VOICE_MODEL_PATH`).
+See [`models/README.md`](models/README.md) and [`docs/MODELS.md`](docs/MODELS.md).
+
 ### Jetson AGX Orin deployment
 See [`docs/JETSON_DEPLOYMENT.md`](docs/JETSON_DEPLOYMENT.md) for complete deployment guide including TensorRT optimization.
 
