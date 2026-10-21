@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+**MEE_015 — License Integration (Gate C) — In Progress (2026-10-21):**
+- G0 intake complete. `docs/development/reports/TASK_MEE_015/GATE_C_SPECIFICATION.md` — 27 testable requirements (R1–R27).
+- License of record: `LICENSE.txt` (Deepsim Commercial Software License v1.1, October 2026). `LICENSE_1.0` retained for reference.
+- Owner decisions: 14-day trial → hard stop; Keygate server-side activation cap (`max_activations=3`) is the device-limit authority; client reports a stable device ID.
+- Planned: `mee/licensing/` package (client, config, device, errors, offline, trial, cli) + `EmotionEngine` integration + `mee-lic` CLI + unit/integration/E2E tests.
+- Version bump planned: 0.1.0 → 0.2.0 (minor — new licensing capability).
+- Status: awaiting CTO G1 (`CTO_PLAN.md`).
+
 **Model Storage Consolidated to a Canonical `models/` Tree + Resolver Layer (2026-10-17):**
 - All production weights now live under `<repo>/models/` (`vision_emotion/`, `voice/`, `voice_gpu/`) — no longer scattered per-library home caches (`~/.emotiefflib/`, `~/.insightface/...`).
 - `tools/download_models.py` (new) — one command populates + verifies `models/` on a fresh host (idempotent; `--mirror` copies existing local weights; `--link` restores legacy backend symlinks).

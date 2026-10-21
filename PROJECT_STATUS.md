@@ -35,16 +35,22 @@
 | **Phase 5** | **End-to-End Validation** | **✅ Complete** | **MEE_009** |
 | **Phase 5b** | **Edge Optimization (Jetson)** | **🔄 In Progress** | **MEE_010, MEE_012, MEE_013** |
 | **Phase 6** | **Remote Access / Demo Distribution** | **✅ Complete** | **MEE_014** |
+| **Phase 7** | **License Integration (Gate C)** | **🔄 In Progress** | **MEE_015** |
 
 
 ## Current Focus
 
 All core phases are complete. The multimodal emotion engine is fully validated end-to-end with synthetic data across 5 scenarios (neutral, happy, sad, frustrated/conflict, cross-over). 106 tests passing.
 
-**Current task complete: MEE_014 (Remote Browser Demo Client).**
+**Current task: MEE_015 (License Integration, Gate C) — G0 intake complete, awaiting CTO G1.**
 
-**Next in sequence:**
-- **MEE_010** — Jetson AGX Orin Deployment — edge optimization and performance measurements  
+- Keygate live instance: `https://licenses.deepsim.ai:8443` (healthy, 2 active MEE licenses, both encrypted at rest).
+- License of record: `LICENSE.txt` (Deepsim Commercial Software License v1.1). `LICENSE_1.0` retained for reference.
+- Owner decisions captured: 14-day trial → hard stop; Keygate server-side activation cap is the device-limit authority.
+- 27 testable requirements in `docs/development/reports/TASK_MEE_015/GATE_C_SPECIFICATION.md`.
+
+**Next in sequence (after MEE_015 closes):**
+- **MEE_010** — Jetson AGX Orin Deployment — edge optimization and performance measurements
 - **MEE_011** — Packaging & Documentation — final release polish
 
 ## Blockers
