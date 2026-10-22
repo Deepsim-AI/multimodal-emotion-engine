@@ -4,24 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "multimodal-emotion-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multimodal emotion estimation from visual and voice inputs — commercially safe, Jetson-ready"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
-license-files = ["LICENSE", "docs/THIRD_PARTY_LICENSES.md"]
+license = {text = "See LICENSE.txt"}
+license-files = ["LICENSE.txt", "docs/THIRD_PARTY_LICENSES.md"]
 authors = [{name = "Deepsim-AI", email = "ai@deepsim.com"}]
 keywords = ["emotion", "multimodal", "Jetson", "facial-expression", "voice-emotion", "edge-computing"]
 
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: Apache Software License (Apache-2.0)",
+    "License :: Other License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+[project.scripts]
+mee-lic = "mee.licensing.cli:main"
 
 [project.optional-dependencies]
 vision = [

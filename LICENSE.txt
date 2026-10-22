@@ -1,0 +1,159 @@
+# Deepsim Multimodal Emotion Engine (MEE) Software License
+
+**Version 1.1 — October 2026**
+
+Copyright © 2026 Deepsim Intelligence Technology Inc.  
+All rights reserved.
+
+## 1. Purpose and scope
+
+The Multimodal Emotion Engine ("MEE"), including its application code, source code, software architecture, documentation, configuration, interfaces, tools, tests, and related materials (collectively, the "Software"), is proprietary software owned by **Deepsim Intelligence Technology Inc.** ("Deepsim"), except for third-party materials identified under Section 7.
+
+This License describes the general terms under which Deepsim may authorize use of the Software. The applicable license type, deployment scope, entitlements, activation limits, term, fees, and any additional conditions may be specified in a license record issued through Deepsim's licensing system (which may be operated using Keygate), an order, or a separate written agreement.
+
+**MEE is one software product with one core codebase.** The license categories below primarily distinguish permitted purposes, deployment and distribution rights, usage limits, and service commitments. They do not, by themselves, imply separate software versions or different emotion-analysis functionality.
+
+## 2. Ownership and rights reserved
+
+Except for third-party components and rights expressly granted in writing, all right, title, and interest in and to the Software remain with Deepsim.
+
+This License does not transfer ownership of the Software or any intellectual property rights to the Licensee. Rights not expressly granted are reserved by Deepsim.
+
+## 3. License grant and license records
+
+Subject to this License and the applicable license record or separate agreement, Deepsim grants the recipient ("Licensee") a limited license to use the Software for the authorized purpose and within the authorized scope.
+
+A license may be limited by, for example:
+
+- the Licensee, organization, application, product, or deployment;
+- development, testing, research, evaluation, or production use;
+- the number of users, installations, servers, devices, or shipped units;
+- enabled services or features, usage quotas, and activation limits;
+- the license term, renewal conditions, or offline grace period; and
+- redistribution, embedding, support, or service-provider rights.
+
+A license key or activation token is evidence of the relevant license entitlement; it does not independently grant rights beyond the applicable license terms. License-system status and technical enforcement are intended to implement the applicable entitlement, not to replace or expand the legal grant.
+
+## 4. License categories
+
+Deepsim may offer the following categories. Availability, eligibility, pricing, and precise terms may be defined separately. These categories are licensing arrangements for the same core Software, not necessarily separate software editions.
+
+### 4.1 Community / Academic
+
+A Community / Academic license may be made available to eligible individuals, students, educators, or researchers for personal evaluation, education, or non-commercial research, subject to its stated conditions.
+
+Unless a separate written grant says otherwise, this category does not authorize commercial production deployment, incorporation into a commercial product, OEM distribution, provision of a paid or hosted service to third parties, or other commercial exploitation.
+
+**This category is a limited proprietary-use grant, not an open-source license.** Access to source code, a registration, or a license key does not grant open-source rights. Any rights expressly granted by an applicable third-party license remain unaffected.
+
+### 4.2 Developer
+
+A Developer license may authorize development, testing, prototyping, benchmarking, and integration work within the scope specified in the license record. It does not authorize production deployment, commercial customer use, redistribution, or embedding in a shipped product unless those rights are expressly included.
+
+### 4.3 Commercial
+
+A Commercial license may authorize production use of MEE in the Licensee's own applications, services, or systems, within the agreed deployment, usage, and distribution limits. It does not automatically grant a right to redistribute MEE as a standalone product, sublicense it, or embed it for distribution to third-party customers.
+
+### 4.4 Enterprise
+
+An Enterprise license may provide broader organizational deployment rights, higher or negotiated limits, centralized administration, support commitments, service levels, or other terms specified in an order or separate agreement. Enterprise status alone does not grant OEM or redistribution rights unless expressly stated.
+
+### 4.5 OEM / Embedded
+
+An OEM / Embedded license may authorize the Licensee to incorporate MEE into specified products, devices, robots, applications, or systems and distribute those products to end customers. The agreement should specify applicable product families, device or unit limits, redistribution rights, update obligations, support, and any per-device, volume-based, or other commercial terms.
+
+End users of an authorized OEM product do not need a separate MEE license solely because they use that product, unless the applicable OEM agreement or end-user terms expressly require one.
+
+### 4.6 Separate agreements control
+
+The actual rights for a Licensee are those stated in the applicable license record, order, or signed agreement, read together with this License. If terms conflict, the signed agreement or order controls to the extent of the conflict, followed by the applicable license record, and then this License, unless the documents expressly specify another order of precedence.
+
+## 5. Restrictions
+
+Except to the extent expressly authorized by an applicable license or agreement, or otherwise permitted by applicable law, the Licensee shall not:
+
+1. sell, resell, sublicense, lease, rent, or otherwise transfer the Software;
+2. distribute, publish, or make the Software available to third parties;
+3. disclose or redistribute proprietary source code or substantial portions of it;
+4. copy the Software except as reasonably necessary for authorized use;
+5. modify, adapt, translate, or create derivative works of the Software;
+6. remove or alter copyright, trademark, license, or other proprietary notices;
+7. use the Software outside the purpose, deployment, or usage scope granted by the applicable license;
+8. reverse engineer, decompile, or disassemble the Software, except to the extent such restriction is prohibited by applicable law;
+9. use Deepsim-owned source code or proprietary components to train, fine-tune, or develop a competing machine-learning system without written authorization, subject to applicable law and third-party rights;
+10. disclose non-public confidential information contained in the Software; or
+11. circumvent technical access controls or license enforcement measures, or knowingly misrepresent activation, device, usage, or entitlement information.
+
+No restriction in this Section is intended to limit rights that cannot lawfully be restricted under applicable law or rights granted by a third-party license.
+
+## 6. Source code and confidentiality
+
+Providing access to source code does not, by itself, grant permission to distribute it or make it open source. Source code may be supplied for the development, evaluation, integration, maintenance, or other purposes authorized by the applicable license or agreement.
+
+The Licensee shall take reasonable measures to protect non-public proprietary source code and confidential technical information from unauthorized access, disclosure, copying, or distribution.
+
+## 7. Third-party components, models, and data
+
+The Software may incorporate or interoperate with third-party libraries, frameworks, models, model weights, datasets, or other materials. Those materials are not necessarily owned by Deepsim or covered by this License and remain subject to their respective terms.
+
+Known third-party components and applicable licenses should be documented in:
+
+`docs/THIRD_PARTY_LICENSES.md`
+
+Licensees are responsible for complying with applicable third-party terms. Nothing in this License grants rights beyond those terms or removes rights that a third-party license independently grants. Commercial use of a third-party model, model weight, or dataset is permitted only where its applicable terms allow that use.
+
+## 8. Licensing service and offline use
+
+Deepsim may use a licensing service to issue, activate, renew, suspend, or revoke license records and to communicate entitlements to the Software. The Software may perform local verification of signed license data and may periodically contact the licensing service, according to the applicable deployment configuration.
+
+The applicable license record or agreement should specify activation limits, renewal behavior, offline operation, grace periods, and the consequences of expiration or revocation. Deepsim will not treat a temporary licensing-service outage as automatically expanding the Licensee's rights. Conversely, a technical error or outage does not by itself change the legal scope of a valid license.
+
+Licensees shall not share activation credentials or misrepresent device or deployment identities. Deepsim may suspend or revoke a license for material misuse, subject to the applicable agreement and applicable law.
+
+## 9. Trademarks
+
+"Deepsim", "Deepsim Intelligence Technology Inc.", "Multimodal Emotion Engine", "MEE", and associated names, logos, and marks are trademarks or proprietary marks of Deepsim or their respective owners. This License does not grant rights to use Deepsim trademarks except as expressly authorized in writing.
+
+## 10. Disclaimer of warranty
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, OR RELIABILITY.
+
+MEE performs analysis of multimodal signals and may produce estimates or classifications that are uncertain, incomplete, or incorrect. The Software is not guaranteed to be suitable for any particular safety-critical, medical, employment, educational, or other high-impact decision. The Licensee is responsible for evaluating the Software for its intended use and for complying with applicable law.
+
+Deepsim does not warrant that the Software will be uninterrupted, error-free, or secure.
+
+## 11. Limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, DEEPSIM INTELLIGENCE TECHNOLOGY INC. SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR LOSS OF PROFITS, REVENUE, DATA, BUSINESS, OR GOODWILL ARISING FROM OR RELATED TO THE USE OF THE SOFTWARE.
+
+Nothing in this License excludes or limits liability to the extent that such exclusion or limitation is prohibited by applicable law. Any different liability terms in a signed commercial agreement will apply as specified in that agreement.
+
+## 12. Term and termination
+
+The license term, renewal, suspension, and termination conditions may be specified in the applicable license record or separate agreement.
+
+Deepsim may terminate a license for material breach if the breach is not cured within a reasonable period after written notice, where a cure period is required or appropriate under the applicable agreement or law. Upon termination, the Licensee shall cease the uses no longer authorized and, where required, return or destroy copies of proprietary materials, subject to any rights that survive or are granted by applicable law or third-party licenses.
+
+Sections concerning ownership, restrictions, confidentiality, third-party rights, disclaimers, limitation of liability, and any other provisions that by their nature should survive termination shall survive.
+
+## 13. No open-source grant
+
+Unless a specific file or component is expressly identified as being distributed under an open-source license, the proprietary portions of MEE are **not released under the Apache License 2.0, MIT License, GPL, LGPL, BSD License, or any other open-source license**.
+
+No right to reproduce, modify, distribute, sublicense, or commercially exploit proprietary portions of MEE is granted except as expressly provided by this License or a separate written agreement. Third-party components remain subject to their own licenses.
+
+## 14. Governing law
+
+This License and any dispute arising from it shall be governed by the laws specified in the applicable signed agreement. If no such agreement specifies governing law, the parties shall determine the applicable law and forum under the rules of private international law and applicable law. Nothing in this Section removes any mandatory rights or protections that apply by law.
+
+## 15. Contact
+
+For commercial licensing, Community / Academic registration, enterprise deployment, OEM integration, partnership, or other business inquiries, contact:
+
+**Deepsim Intelligence Technology Inc.**  
+Email: **licensing@deepsim.ai**  
+Website: **https://deepsim.ai**
+
+---
+
+**Copyright © 2026 Deepsim Intelligence Technology Inc. All rights reserved.**

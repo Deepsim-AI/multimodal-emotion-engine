@@ -2,11 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.2.0] — 2026-10-21
+
+### Added
+
+**MEE_015 — License Integration (Gate C) — v0.2.0 (CLOSED, all gates complete):**
+- Full license integration delivered on schedule after G4 APPROVED (all 20 checks pass).
+- `mee/licensing/` package (8+ files): `client.py` (LicenseClient activate/verify/status/deactivate), `config.py` (config + TrialConfig with Keygate-feature > env > 14-day precedence), `device.py` (stable persistent device ID), `errors.py` (LicenseExpiredError, ActivationLimitError), `offline.py` (ed25519 verification + base64url decode), `trial.py` (14-day trial lifecycle, immutable marker), `cli.py` (`mee-lic` CLI + entry point), `results.py` (VerificationResult dataclass, 7 fields).
+- `mee/api/engine.py` — `_license_check()` gate in `process()`, `_license_status_block()` in `health()` (backward compatible: returns None when no license client).
+- `mee/api/license.py` — `license_status()` public wrapper.
+- `tools/license_smoke_test.py` — 6-step end-to-end acceptance smoke.
+- Entitlement model: Keygate feature-map driven, single code path, no `plan_name` matching (extensibility-compliant); unknown features stored-but-ignored; missing entitlements default to disabled.
+- Offline fallback via ed25519 (verified on host; `cryptography` already transitive, no new dependency).
+- **Tests:** 80 licensing tests (22 client, 16 config, 5 device, 10 trial, 7 offline, 3 security, 8 CLI) + 9 engine-integration tests + 6 E2E smoke; 170 regression tests pass (5 pre-existing skips unchanged). Frozen contracts 0-line diff.
+- LICENSE alignment: `LICENSE.txt` (Deepsim Commercial Software License v1.1) canonical; `LICENSE_1.0` retained.
+- Version bump: 0.1.0 → 0.2.0 (minor — new licensing capability).
+- Phase 7 (License Integration, Gate C) now COMPLETE. Remote push pending user confirmation of target URL + branch.
+
+### Changes
+
+- `pyproject.toml` version: `0.1.0 → 0.2.0`.
+
 ## [Unreleased]
 
 ### Added
 
-**MEE_015 — License Integration (Gate C) — In Progress (2026-10-21):**
+**MEE_015 — License Integration (Gate C) — v0.2.0 (2026-10-21, CLOSED):****
 - G0 intake complete. `docs/development/reports/TASK_MEE_015/GATE_C_SPECIFICATION.md` — 27 testable requirements (R1–R27).
 - License of record: `LICENSE.txt` (Deepsim Commercial Software License v1.1, October 2026). `LICENSE_1.0` retained for reference.
 - Owner decisions: 14-day trial → hard stop; Keygate server-side activation cap (`max_activations=3`) is the device-limit authority; client reports a stable device ID.

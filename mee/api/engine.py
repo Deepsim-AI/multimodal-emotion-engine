@@ -21,6 +21,11 @@ from ..fusion.emotion_fusion import EmotionFusion, EmotionFusionConfig
 from ..state.history import EmotionHistory
 from ..state.estimator import TrendConfig, analyze_trend
 
+# TASK_MEE_015 (Gate C): lazy licensing — imported here only for type hints;
+# the actual client is imported inside _license_check() on first use so that
+# EmotionEngine.__init__ does NOT touch licensing (R12 / CORE_CONTRACTS §1.1).
+
+
 
 def _repo_root() -> str:
     """The repo root (parent of the ``mee/`` package).
@@ -148,6 +153,11 @@ class EmotionEngine:
             window=int(self.config.trend_window),
             conf_threshold=float(self.config.conflict_threshold),
         )
+        # TASK_MEE_015 (Gate C): license client — LAZY. __init__ performs NO
+        # license check (R12 / CORE_CONTRACTS §1.1). The client is created on
+        # the first process() call and reused thereafter.
+        self._license_client = None
+        self._license_warned = False
 
     def _ensure_vision(self):
         """TASK_MEE_004: Lazy-load the vision processor (one-time cost)."""
@@ -227,6 +237,12 @@ class EmotionEngine:
         Returns:
             JSON-serializable dict with keys: face, voice, overall, trend, latency_ms.
         """
+        # TASK_MEE_015 (Gate C): license gate — verify before inference.
+        # Lazy-init on first call; raises LicenseExpiredError if no valid
+        # license (R10, R12). The client caches its own state (R4/R5) so
+        # repeated calls do not hammer the network.
+        self._license_check()
+
         t0 = time.perf_counter()
 
         # ---- Vision path ----
@@ -336,6 +352,110 @@ class EmotionEngine:
     def is_ready(self) -> bool:
         return self._model_ready
 
+    # ---- TASK_MEE_015 (Gate C): licensing gate ----
+
+    def _license_check(self) -> None:
+        """Verify license before inference (R10, R11, R12).
+
+        Lazy-initializes the :class:`~mee.licensing.client.LicenseClient`
+        on first call. Raises :class:`LicenseExpiredError` when no valid
+        license (or trial) is available. Never blocks startup — only
+        ``process()`` is gated.
+        """
+        from ..licensing.client import LicenseClient
+        from ..licensing.config import LicensingConfig
+        from ..licensing.errors import LicenseExpiredError
+        from ..licensing.trial import (
+            ensure_trial_marker,
+            is_trial_expired,
+            trial_active,
+            is_deactivated,
+        )
+
+        if self._license_client is None:
+            self._license_client = LicenseClient(LicensingConfig())
+
+        result = self._license_client.verify()
+        if result.valid:
+            # R9: warn once per 10 min while on trial (rate-limited in trial.py).
+            if result.license_status == "trialing":
+                from ..licensing.trial import _warn_trial_usage
+                sd = self._license_client.config.state_dir
+                if trial_active(sd) and not self._license_warned:
+                    _warn_trial_usage()
+                    self._license_warned = True
+            return
+
+        # Not valid (R10, R42). Distinguish:
+        #  - no license key at all  → trial evaluation (R9-R11, R41)
+        #  - license key present but server says invalid/suspended/revoked
+        #    → hard stop (R42: suspended/revoked are never valid).
+        # R42: explicitly invalid lifecycle states (suspended, revoked,
+        # past_due, canceled, expired) are hard stops — never fall through
+        # to trial. R10: an invalid license present → raise.
+        _INVALID_STATES = {"suspended", "revoked", "past_due",
+                           "canceled", "expired"}
+        if result.license_status in _INVALID_STATES:
+            raise LicenseExpiredError(
+                f"License invalid (status={result.license_status!r}). "
+                "Activate a valid license with `mee-lic activate <key>`.")
+
+        # Otherwise, no-key / unknown-status path → trial evaluation.
+        cfg = getattr(self._license_client, "config", None)
+        has_key = bool(getattr(cfg, "license_key", None)) if cfg else False
+        if not has_key:
+            cur = getattr(self._license_client, "_current_key", None)
+            if callable(cur):
+                try:
+                    has_key = bool(cur())
+                except Exception:
+                    has_key = False
+        if has_key:
+            raise LicenseExpiredError(
+                f"License invalid (status={result.license_status!r}). "
+                "Activate a valid license with `mee-lic activate <key>`.")
+
+        # No key → trial path.
+        cfg = getattr(self._license_client, "config", None)
+        sd = getattr(cfg, "state_dir", None) if cfg is not None else None
+        if sd is None:
+            from pathlib import Path
+            sd = Path.home() / ".config" / "mee-licensing" / "licenses"
+        # A deactivated device does not re-enter a fresh trial (spec chain:
+        # deactivate → process() → LicenseExpiredError).
+        if is_deactivated(sd):
+            raise LicenseExpiredError(
+                "License deactivated on this device. "
+                "Activate a valid license with `mee-lic activate <key>` to continue.")
+        ensure_trial_marker(sd, features=result.features)
+        if trial_active(sd):
+            # Trial still active → allow, warn (R9).
+            if not self._license_warned:
+                from ..licensing.trial import _warn_trial_usage
+                _warn_trial_usage()
+                self._license_warned = True
+            return
+        raise LicenseExpiredError(
+            "Trial expired and no valid license present. "
+            "Activate a license with `mee-lic activate <key>` to continue.")
+
+    def _license_status_block(self) -> dict | None:
+        """Return the license block for health() (R13, R46) or None if the
+        client has not been initialized (R46: omit the key entirely when
+        ``self._license_client is None`` for backward compatibility).
+        """
+        if self._license_client is None:
+            return None
+        st = self._license_client.status()
+        return {
+            "status": st.get("status"),
+            "plan_id": st.get("plan_id"),
+            "plan_name": st.get("plan_name"),
+            "remaining_days": st.get("remaining_days"),
+            "offline": st.get("offline", False),
+            "features": st.get("features"),
+        }
+
     def health(self) -> dict:
         """TASK_MEE_CONTRACT_ENHANCEMENT_001 Gap B: real readiness signal.
 
@@ -352,17 +472,26 @@ class EmotionEngine:
         vision_ok = self._vision_processor is not None
         voice_ok = self._voice_processor is not None
 
+        # TASK_MEE_015 (Gate C): license block (R13, R40, R46).
+        # Only present after first process() call (R46 backward compat).
+        license_block = self._license_status_block()
+
+        def _with_license(base: dict) -> dict:
+            if license_block is not None:
+                base = {**base, "license": license_block}
+            return base
+
         if vision_ok and voice_ok:
-            return {"status": "ready", "detail": "All models loaded (vision + voice)"}
+            return _with_license({"status": "ready", "detail": "All models loaded (vision + voice)"})
         if vision_ok or voice_ok:
-            return {
+            return _with_license({
                 "status": "degraded",
                 "detail": (
                     f"Vision: {'OK' if vision_ok else 'missing'}, "
                     f"Voice: {'OK' if voice_ok else 'missing'}"
                 ),
-            }
-        return {"status": "unavailable", "detail": "No models loaded"}
+            })
+        return _with_license({"status": "unavailable", "detail": "No models loaded"})
 
 
 # Convenience import alias
