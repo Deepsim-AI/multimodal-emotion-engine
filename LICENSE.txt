@@ -42,6 +42,8 @@ Deepsim may offer the following categories. Availability, eligibility, pricing, 
 
 A Community / Academic license may be made available to eligible individuals, students, educators, or researchers for personal evaluation, education, or non-commercial research, subject to its stated conditions.
 
+**Request (free):** Self-service via the MEE remote demo License UI or Keygate admin API. Rate-limited: 1 per email per 24 h. No card required.
+
 Unless a separate written grant says otherwise, this category does not authorize commercial production deployment, incorporation into a commercial product, OEM distribution, provision of a paid or hosted service to third parties, or other commercial exploitation.
 
 **This category is a limited proprietary-use grant, not an open-source license.** Access to source code, a registration, or a license key does not grant open-source rights. Any rights expressly granted by an applicable third-party license remain unaffected.
@@ -50,17 +52,25 @@ Unless a separate written grant says otherwise, this category does not authorize
 
 A Developer license may authorize development, testing, prototyping, benchmarking, and integration work within the scope specified in the license record. It does not authorize production deployment, commercial customer use, redistribution, or embedding in a shipped product unless those rights are expressly included.
 
+**Purchase:** [https://licenses.deepsim.ai:8443/pay/6c5bce2c](https://licenses.deepsim.ai:8443/pay/6c5bce2c) (yearly billing, 3 activations)
+
 ### 4.3 Commercial
 
 A Commercial license may authorize production use of MEE in the Licensee's own applications, services, or systems, within the agreed deployment, usage, and distribution limits. It does not automatically grant a right to redistribute MEE as a standalone product, sublicense it, or embed it for distribution to third-party customers.
+
+**Purchase:** [https://licenses.deepsim.ai:8443/pay/7d44a91b](https://licenses.deepsim.ai:8443/pay/7d44a91b) (yearly billing, 3 activations)
 
 ### 4.4 Enterprise
 
 An Enterprise license may provide broader organizational deployment rights, higher or negotiated limits, centralized administration, support commitments, service levels, or other terms specified in an order or separate agreement. Enterprise status alone does not grant OEM or redistribution rights unless expressly stated.
 
+**Purchase:** [https://licenses.deepsim.ai:8443/pay/d09d97da](https://licenses.deepsim.ai:8443/pay/d09d97da) (yearly billing, 5 activations)
+
 ### 4.5 OEM / Embedded
 
 An OEM / Embedded license may authorize the Licensee to incorporate MEE into specified products, devices, robots, applications, or systems and distribute those products to end customers. The agreement should specify applicable product families, device or unit limits, redistribution rights, update obligations, support, and any per-device, volume-based, or other commercial terms.
+
+**Purchase:** [https://licenses.deepsim.ai:8443/pay/15f2f3d7](https://licenses.deepsim.ai:8443/pay/15f2f3d7) (yearly billing, 5 activations)
 
 End users of an authorized OEM product do not need a separate MEE license solely because they use that product, unless the applicable OEM agreement or end-user terms expressly require one.
 

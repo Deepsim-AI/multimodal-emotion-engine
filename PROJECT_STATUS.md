@@ -21,6 +21,7 @@
 | MEE_013 | Detection frequency decoupling (`detect_every_n_frames`) | ✅ G4 Approved — G5 closeout complete | 2026-09-23 |
 | MEE_014 | Remote Browser Demo Client | ✅ G4 Approved — **CLOSED** (G5 pending user remote confirm) | 2026-09-23 |
 | MEE_015 | License Integration (Gate C) | ✅ **G4 APPROVED — CLOSED (v0.2.0)** | 2026-10-21 |
+| MEE_019 | License Plan Selection & Purchase UI | ✅ **G4 APPROVED — CLOSED (v0.3.0)** | 2026-10-22 |
 
 
 ---
@@ -37,13 +38,14 @@
 | **Phase 5b** | **Edge Optimization (Jetson)** | **🔄 In Progress** | **MEE_010, MEE_012, MEE_013** |
 | **Phase 6** | **Remote Access / Demo Distribution** | **✅ Complete** | **MEE_014** |
 | **Phase 7** | **License Integration (Gate C)** | **✅ COMPLETE** | **MEE_015** |
+| **Phase 8** | **License Plan Selection & Purchase UI** | **✅ COMPLETE** | **MEE_019** |
 
 
 ## Current Focus
 
 All core phases are complete. The multimodal emotion engine is fully validated end-to-end with synthetic data across 5 scenarios (neutral, happy, sad, frustrated/conflict, cross-over). 106 tests passing.
 
-**Current task: MEE_015 (License Integration, Gate C) — G5 closure COMPLETE, released as v0.2.0.**
+**Current task: MEE_019 (License Plan Selection & Purchase UI) — G5 closure COMPLETE, released as v0.3.0.**
 
 - Keygate live instance: `https://licenses.deepsim.ai:8443` (healthy, 2 active MEE licenses, both encrypted at rest).
 - License of record: `LICENSE.txt` (Deepsim Commercial Software License v1.1). `LICENSE_1.0` retained for reference.

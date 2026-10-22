@@ -142,6 +142,39 @@ See [`docs/THIRD_PARTY_LICENSES.md`](docs/THIRD_PARTY_LICENSES.md) for the compl
 
 The MEE core package is distributed under the **Deepsim Commercial Software License v1.1** (`LICENSE.txt`). Previous versions are retained in `LICENSE_1.0` for reference. License activation is managed via the `mee-lic` CLI against the Keygate server (see `docs/development/reports/TASK_MEE_015/` for the Gate C specification).
 
+### Licensing & Plans (TASK_MEE_019)
+
+MEE offers five license plans. The remote demo (`mee-remotedemo`) includes a built-in License UI
+(license status card, plan selection grid, key activation, deactivation, and free Community/Academic
+request) at the bottom of the right column.
+
+| Plan | Type | Purchase / Request | Max Activations | Billing |
+|------|------|--------------------|-----------------|---------|
+| **Community / Academic** | Free | Self-service request via License UI (name + email, institution optional) | 1 | — |
+| **Developer** | Paid | [Checkout](https://licenses.deepsim.ai:8443/pay/6c5bce2c) | 3 | Yearly |
+| **Commercial** | Paid | [Checkout](https://licenses.deepsim.ai:8443/pay/7d44a91b) | 3 | Yearly |
+| **Enterprise** | Paid | [Checkout](https://licenses.deepsim.ai:8443/pay/d09d97da) | 5 | Yearly |
+| **OEM / Embedded** | Paid | [Checkout](https://licenses.deepsim.ai:8443/pay/15f2f3d7) | 5 | Yearly |
+
+**Free Community/Academic request:** Click the Community/Academic card in the License UI, fill in
+your name, email, and (optionally) institution, then click **Request Free License**. A real license
+key is returned immediately via the Keygate admin API (server-side proxy — no card required).
+Rate-limited: 1 request per email per 24 h, 3 per IP per hour.
+
+**Paid plans:** Clicking a paid plan card opens the Keygate Stripe Checkout page in a new tab.
+After payment the license key is created in Keygate and can be activated from the License UI or
+via `mee-lic activate <key>`.
+
+**CLI (unchanged, TASK_MEE_015):**
+
+```bash
+mee-lic status                        # show current license status
+mee-lic activate <KEY>                # activate a license key
+mee-lic deactivate                    # deactivate the current license
+```
+
+**Keygate server:** `https://licenses.deepsim.ai:8443` (configurable via `MEE_LICENSE_SERVER`).
+
 ### Summary
 
 | Category | License | Commercial Use? |

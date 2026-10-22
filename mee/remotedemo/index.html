@@ -115,6 +115,30 @@ input[type=text], input[type=url] {
 /* TASK_MEE_017 Task A: camera toggle state styles */
 .cam-toggle-on { color: #6f6; font-weight: bold; }
 .cam-toggle-off { color: #999; text-decoration: line-through; }
+/* TASK_MEE_019: license plan selection & purchase UI */
+.license-card { background: var(--panel); border-radius: 10px; padding: 14px;
+  border: 1px solid #2a333f; margin-top: 16px; }
+.license-card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 10px; }
+.license-status-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px; margin-top: 10px; }
+.plan-card { background: var(--panel-2); border: 1px solid #34404e; border-radius: 8px;
+  padding: 10px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.plan-card:hover { border-color: var(--accent); box-shadow: 0 0 6px rgba(79,195,247,.15); }
+.plan-card.selected { border-color: var(--accent); box-shadow: 0 0 8px rgba(79,195,247,.25); }
+.plan-card .plan-name { font-size: 13px; font-weight: 600; margin: 4px 0; }
+.plan-card .plan-desc { font-size: 11px; color: var(--muted); }
+.plan-badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: .04em; }
+.plan-badge-free { background: #1c3320; color: #6f6; }
+.plan-badge-paid { background: #1a2538; color: var(--accent); }
+#licenseForm { display: none; margin-top: 10px; padding: 10px; background: var(--panel-2);
+  border-radius: 8px; }
+#licenseForm.active { display: block; }
+#licenseForm input { width: 100%; margin-bottom: 6px; }
+.license-error { color: var(--err); font-size: 12px; margin-top: 4px; }
+.license-ok { color: var(--ok); font-size: 12px; margin-top: 4px; }
 footer { margin-top: 14px; font-size: 12px; color: var(--muted); }
 code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 </style>
@@ -217,6 +241,52 @@ code { background: #0b1015; padding: 1px 5px; border-radius: 4px; font-size: 12p
         <h2>Voice Emotion</h2>
         <div id="voiceBars" class="bars"></div>
         <div id="voiceMeta" style="margin-top:10px;font-size:12px;color:var(--muted)">no voice data</div>
+      </div>
+    </div>
+
+    <!-- TASK_MEE_019: License Plan Selection & Purchase UI -->
+    <div class="card license-card" id="licenseSection">
+      <h2>License</h2>
+
+      <!-- Status Display -->
+      <div id="licenseStatusCard" style="display:none;">
+        <div class="license-status-row">
+          <span id="licDot" class="dot off"></span>
+          <span id="licStatus" style="font-weight:600;">&#8212;</span>
+          <span id="licPlan" style="color:var(--muted); font-size:12px;"></span>
+          <span id="licOffline" style="color:var(--warn); font-size:11px; display:none;">&#9888; offline</span>
+        </div>
+        <div style="font-size:12px; color:var(--muted);" id="licMeta">
+          <span id="licDays">&#8212;</span> &#183;
+          <span id="licDevice">device: &#8212;</span>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button id="btnDeactivate" class="danger" style="display:none; font-size:12px; padding:6px 10px;">Deactivate License</button>
+          <span id="deactivateMsg"></span>
+        </div>
+      </div>
+
+      <!-- Plan Selection -->
+      <h3 style="font-size:12px; color:var(--muted); margin: 14px 0 6px; text-transform:uppercase;">Select a License Plan</h3>
+      <div class="plan-grid" id="planGrid"></div>
+
+      <!-- Community/Academic Form (shown when that plan is selected) -->
+      <div id="licenseForm">
+        <input type="text" id="reqName" placeholder="Your name *" required>
+        <input type="email" id="reqEmail" placeholder="Email *" required>
+        <input type="text" id="reqInstitution" placeholder="Institution (optional)">
+        <div class="row">
+          <button id="btnRequestFree" class="primary" style="font-size:12px; padding:6px 10px;">Request Free License</button>
+          <span id="requestMsg"></span>
+        </div>
+      </div>
+
+      <!-- Key Activation -->
+      <h3 style="font-size:12px; color:var(--muted); margin: 14px 0 6px; text-transform:uppercase;">Activate Existing Key</h3>
+      <div class="row">
+        <input type="text" id="activateKey" placeholder="Paste your license key..." spellcheck="false">
+        <button id="btnActivate" style="font-size:12px; padding:6px 10px;">Activate</button>
+        <span id="activateMsg"></span>
       </div>
     </div>
   </div>
@@ -977,6 +1047,190 @@ $("btnStop").addEventListener("click", () => {
   setBanner($("streamBanner"), "ok", "Stopped.");
 });
 window.addEventListener("beforeunload", () => { try { if (ws) ws.close(1000, "page unload"); } catch {} });
+
+// ============================================================================
+// TASK_MEE_019: License Plan Selection & Purchase UI
+// ============================================================================
+// PLANS: 5 plans (4 paid -> public Keygate checkout links; 1 free ->
+// self-service request).  Per AD-4 the checkout URLs are public payment
+// links and safe in client code.  NO secrets appear here (AC4/S3).
+const PLANS = {
+  "community-academic": { name: "Community / Academic", type: "free",
+    description: "Free for personal, education & non-commercial research use." },
+  "developer":          { name: "Developer", type: "paid",
+    description: "Development, testing, prototyping & integration.",
+    checkout: "https://licenses.deepsim.ai:8443/pay/6c5bce2c" },
+  "commercial":         { name: "Commercial", type: "paid",
+    description: "Production use in your own applications & services.",
+    checkout: "https://licenses.deepsim.ai:8443/pay/7d44a91b" },
+  "enterprise":         { name: "Enterprise", type: "paid",
+    description: "Broader organizational deployment, higher limits, support.",
+    checkout: "https://licenses.deepsim.ai:8443/pay/d09d97da" },
+  "oem-embedded":       { name: "OEM / Embedded", type: "paid",
+    description: "Embedding & distribution in shipped products / devices.",
+    checkout: "https://licenses.deepsim.ai:8443/pay/15f2f3d7" },
+};
+
+// The license API lives on a secondary HTTP server (AD-2):
+//  - local dev (page served from the WS port 8910)  -> http://localhost:18910
+//  - remote (page served via the tunnel on :8443)   -> same-origin :19443 (8443+1000)
+// Overridable with ?licenseBase=<url> in the page query string.
+function licenseApiBase() {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("licenseBase")) return q.get("licenseBase").replace(/\/+$/, "");
+    if (location.port === "8910") {
+      return "http://" + location.hostname + ":18910";
+    }
+    const p = parseInt(location.port, 10);
+    if (p) return location.protocol + "//" + location.hostname + ":" + (p + 1000);
+    return location.origin; // default ports: try same origin first
+  } catch (e) { return location.origin; }
+}
+
+async function licenseFetch(path, opts) {
+  const resp = await fetch(licenseApiBase() + path, opts);
+  let data = {};
+  try { data = await resp.json(); } catch (e) { /* non-JSON */ }
+  return { ok: resp.ok, status: resp.status, data };
+}
+
+function renderLicenseStatus(d) {
+  const card = $("licenseStatusCard");
+  card.style.display = "block";
+  const st = (d.status || "unknown").toLowerCase();
+  $("licStatus").textContent = st;
+  const dot = $("licDot");
+  dot.className = "dot " + (st === "licensed" ? "ok" : (st === "trialing" ? "warn" : "off"));
+  $("licPlan").textContent = d.plan_name ? ("plan: " + d.plan_name) : "";
+  $("licOffline").style.display = d.offline ? "inline" : "none";
+  $("licDays").textContent = (d.remaining_days != null) ? (d.remaining_days + " days remaining") : "days: \u2014";
+  $("licDevice").textContent = "device: " + (d.device_id || "\u2014");
+  // AC9: deactivate button only visible when licensed.
+  $("btnDeactivate").style.display = (st === "licensed") ? "inline-block" : "none";
+}
+
+function renderPlanGrid() {
+  const grid = $("planGrid");
+  grid.innerHTML = "";
+  for (const slug of Object.keys(PLANS)) {
+    const p = PLANS[slug];
+    const div = document.createElement("div");
+    div.className = "plan-card";
+    div.id = "plan-" + slug;
+    div.innerHTML =
+      '<span class="plan-badge ' + (p.type === "free" ? "plan-badge-free" : "plan-badge-paid") + '">' +
+      (p.type === "free" ? "FREE" : "PAID") + "</span>" +
+      '<div class="plan-name">' + p.name + "</div>" +
+      '<div class="plan-desc">' + p.description + "</div>";
+    div.addEventListener("click", () => handlePlanSelect(slug));
+    grid.appendChild(div);
+  }
+}
+
+function handlePlanSelect(slug) {
+  // Mark selected card.
+  for (const s of Object.keys(PLANS)) {
+    const el = $("plan-" + s);
+    if (el) el.classList.toggle("selected", s === slug);
+  }
+  const p = PLANS[slug];
+  const form = $("licenseForm");
+  if (p.type === "free") {
+    form.classList.add("active");   // show self-service request form
+  } else {
+    form.classList.remove("active");
+    // AC1: paid plans open the public checkout link in a NEW tab.
+    window.open(p.checkout, "_blank", "noopener");
+  }
+}
+
+async function refreshLicenseStatus() {
+  try {
+    const r = await licenseFetch("/license/status");
+    if (r.data && r.data.status) renderLicenseStatus(r.data);
+  } catch (e) {
+    const card = $("licenseStatusCard");
+    card.style.display = "block";
+    $("licStatus").textContent = "unreachable";
+    $("licDot").className = "dot off";
+    $("licDays").textContent = "license API not reachable at " + licenseApiBase();
+  }
+}
+
+function msg(el, ok, text) {
+  el.className = ok ? "license-ok" : "license-error";
+  el.textContent = text;
+}
+
+async function doActivate() {
+  const key = $("activateKey").value.trim();
+  if (!key) { msg($("activateMsg"), false, "enter a license key"); return; }
+  $("btnActivate").disabled = true;
+  try {
+    const r = await licenseFetch("/license/activate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: key }),
+    });
+    if (r.data && r.data.valid) {
+      msg($("activateMsg"), true, "activated: " + (r.data.plan_name || r.data.status || "ok"));
+      $("activateKey").value = "";
+      refreshLicenseStatus();
+    } else {
+      msg($("activateMsg"), false, (r.data && r.data.message) || ("HTTP " + r.status));
+    }
+  } catch (e) { msg($("activateMsg"), false, "request failed: " + e.message); }
+  finally { $("btnActivate").disabled = false; }
+}
+
+async function doDeactivate() {
+  if (!confirm("Deactivate the current license on this device?")) return;
+  $("btnDeactivate").disabled = true;
+  try {
+    const r = await licenseFetch("/license/deactivate", { method: "POST" });
+    if (r.data && r.data.status === "deactivated") {
+      msg($("deactivateMsg"), true, "license deactivated");
+      refreshLicenseStatus();
+    } else {
+      msg($("deactivateMsg"), false, (r.data && r.data.message) || ("HTTP " + r.status));
+    }
+  } catch (e) { msg($("deactivateMsg"), false, "request failed: " + e.message); }
+  finally { $("btnDeactivate").disabled = false; }
+}
+
+async function doRequestFree() {
+  const name = $("reqName").value.trim();
+  const email = $("reqEmail").value.trim();
+  const institution = $("reqInstitution").value.trim();
+  if (!name || name.length < 2) { msg($("requestMsg"), false, "name is required (min 2 chars)"); return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg($("requestMsg"), false, "valid email is required"); return; }
+  $("btnRequestFree").disabled = true;
+  try {
+    const r = await licenseFetch("/license/request-community", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, email: email, institution: institution || undefined }),
+    });
+    if (r.status === 429) {
+      const wait = (r.data && r.data.retry_after) ? (" (retry in ~" + r.data.retry_after + "s)") : "";
+      msg($("requestMsg"), false, "too many requests" + wait);
+      return;
+    }
+    if (r.data && r.data.license_key) {
+      msg($("requestMsg"), true, "license issued: " + r.data.license_key);
+      $("activateKey").value = r.data.license_key; // convenience: prefill activation
+    } else {
+      msg($("requestMsg"), !!(r.data && r.data.message), (r.data && (r.data.error || r.data.message)) || ("HTTP " + r.status));
+    }
+  } catch (e) { msg($("requestMsg"), false, "request failed: " + e.message); }
+  finally { $("btnRequestFree").disabled = false; }
+}
+
+// wiring
+renderPlanGrid();
+refreshLicenseStatus();
+$("btnActivate").addEventListener("click", doActivate);
+$("btnDeactivate").addEventListener("click", doDeactivate);
+$("btnRequestFree").addEventListener("click", doRequestFree);
 
 // Remember last-used URL + token for convenience (not the token value itself).
 try {

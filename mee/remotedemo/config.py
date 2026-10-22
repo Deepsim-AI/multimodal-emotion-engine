@@ -57,6 +57,7 @@ class RemotedemoConfig:
         max_audio_chunk_samples: Optional[int] = None,
         max_frame_bytes: Optional[int] = None,
         cors_origin: Optional[str] = None,
+        license_http_port: Optional[int] = None,
     ) -> None:
         sdir = default_state_dir()
         self.host = host if host is not None else _env("MEE_DEMO_HOST", "127.0.0.1")
@@ -79,6 +80,12 @@ class RemotedemoConfig:
         self.max_frame_bytes = (int(max_frame_bytes) if max_frame_bytes is not None
                                 else int(_env("MEE_DEMO_MAX_FRAME_BYTES", str(4 * 1024 * 1024))))
         self.cors_origin = cors_origin if cors_origin is not None else _env("MEE_DEMO_CORS_ORIGIN", "*")
+        # TASK_MEE_019 Task A (AD-2): secondary HTTP port for the license
+        # management API (POST endpoints).  Defaults to WS port + 1000 (8910
+        # -> 18910) so the two ports sit side by side and are predictable.
+        self.license_http_port = (
+            int(license_http_port) if license_http_port is not None
+            else int(_env("MEE_DEMO_HTTP_PORT", "0")) or (self.port + 1000))
 
     def resolve_token(self, create: bool = True) -> str:
         """Return the active access credential, generating + persisting one if needed.
@@ -123,6 +130,7 @@ class RemotedemoConfig:
             "idle_timeout_s": self.idle_timeout_s,
             "max_fps": self.max_fps,
             "cors_origin": self.cors_origin,
+            "license_http_port": self.license_http_port,
         }
         inner = ", ".join(f"{k}={v!r}" for k, v in fields.items())
         return f"RemotedemoConfig({inner})"

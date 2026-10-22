@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.3.0] — 2026-10-22
+
+### Added
+
+**MEE_019 — License Plan Selection & Purchase UI — v0.3.0 (2026-10-22, CLOSED, all gates complete):**
+- Built-in License UI in the remote demo (`mee/remotedemo`): license status card, five-plan selection grid, key activation, deactivation, and free Community/Academic request at the bottom of the right column.
+- Five license plans documented (Community/Academic free; Developer, Commercial, Enterprise, OEM/Embedded paid) with live Keygate Stripe Checkout links; `README.md` Licensing section and `LICENSE.txt` section 4 updated.
+- **4 API endpoints** on a secondary `ThreadingHTTPServer` (`license_http_port`, default WS `port + 1000`, `MEE_DEMO_HTTP_PORT` override): `GET /license/status`, `POST /license/activate`, `POST /license/deactivate`, `POST /license/request-community`. Real Keygate integration via `LicenseClient`.
+- **Rate limiting** for community licenses: `CommunityRequestRateLimiter` (1 request/email/24 h, 3 requests/IP/hour, independent TTL windows), HTTP 429 + `retry_after`; in-memory storage, no new dependency.
+- `GET /license/status` served on the WebSocket port via existing `_http_endpoint()` (no new port for GET).
+- Security: `KEYGATE_API_KEY` resolved server-side (`_keygate_api_key()`, env→file→None), never exposed to browser; `_sanitize_err()` strips bearer tokens / key fragments from error responses; no secrets in `index.html`.
+- Input validation: email regex, name length ≥ 2, missing-field checks; all endpoints wrapped in try/except with safe fallbacks.
+- **Tests:** 36 new tests in `tests/test_license_ui.py` (rate limiter 9, config 3, API-key resolution 4, endpoint handlers 12, shape/validator 8) — all passing; full suite 36/36.
+- Version bump: 0.2.0 → 0.3.0 (minor — new license UI capability).
+- **Frozen contracts untouched:** 0-line diff across all `mee/licensing/` files (per BOUNDARIES.md). No production license logic changed.
+- Phase 8 (License Plan Selection & Purchase UI) now COMPLETE.
+
 ## [v0.2.0] — 2026-10-21
 
 ### Added

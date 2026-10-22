@@ -21,16 +21,32 @@ Design constraints (from CTO_PLAN.md + G3_RESPONSE.md):
   - Auth: token as first WS text message; failure closes the connection.
   - Audit log: every auth outcome (success/failure) appended to auth_log_file.
   - CORS: Access-Control-Allow-Origin header on the WebSocket upgrade.
+
+TASK_MEE_019 (License Plan Selection & Purchase UI):
+  * GET  /license/status           (WS port, _http_endpoint)
+  * POST /license/activate         {key}
+  * POST /license/deactivate       {}
+  * POST /license/request-community {name,email,institution?}
+    The three POST endpoints live on a secondary stdlib HTTP server
+    (ThreadingHTTPServer) on MEE_DEMO_HTTP_PORT (default WS port + 1000),
+    because websockets' process_request hook never receives a request body.
+  * Rate limiting (CommunityRequestRateLimiter): 1 free-license request per
+    email per 24h, 3 per IP per hour.  429 + retry_after when exceeded.
+  * Security: KEYGATE_API_KEY is read server-side only (env or $MEE_HOME
+    file); it never appears in index.html or any client-side code (AC4/S3).
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import json
+import json as _json  # TASK_MEE_019: alias used by the license HTTP handlers
 import logging
 import logging.handlers
 import os
+import re
 import signal
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -67,6 +83,52 @@ MAX_AUDIO_CHUNK_SAMPLES = 16000
 # error and throttles inference to a sane rate.
 AUDIO_INFERENCE_SAMPLES = 16000   # 2.0 s @ 16 kHz
 AUDIO_BUFFER_MAX_SAMPLES = 64000  # 4.0 s @ 16 kHz — discard oldest beyond this
+
+# TASK_MEE_019 (CommunityRequestRateLimiter policy — CORE_CONTRACTS §3):
+#   per email: 1 free-license request per 24 hours (86400 s)
+#   per IP:    3 free-license requests per hour (3600 s)
+COMMUNITY_LIMIT_EMAIL = 1
+COMMUNITY_EMAIL_WINDOW_S = 86400
+COMMUNITY_LIMIT_IP = 3
+COMMUNITY_IP_WINDOW_S = 3600
+
+# TASK_MEE_019 (S1): Keygate admin API key — server-side only, never in the
+# browser.  Resolution precedence (env wins over file):
+#   1. MEE_KEYGATE_API_KEY environment variable
+#   2. $MEE_HOME/keygate_api_key file (MEE_HOME defaults to
+#      ~/.config/mee-licensing — same home dir as mee.licensing.config)
+KEYGATE_ADMIN_ENV = "MEE_KEYGATE_API_KEY"
+
+
+def _keygate_api_key() -> Optional[str]:
+    """TASK_MEE_019 (S1): resolve the Keygate admin API key, server-side only."""
+    env = (os.environ.get(KEYGATE_ADMIN_ENV) or "").strip()
+    if env:
+        return env
+    try:
+        import pathlib
+        home = os.environ.get("MEE_HOME", "").strip()
+        base = (pathlib.Path(home).expanduser() if home
+                else pathlib.Path.home() / ".config" / "mee-licensing")
+        f = base / "keygate_api_key"
+        if f.exists():
+            val = f.read_text().strip()
+            if val:
+                return val
+    except OSError:
+        pass
+    return None
+
+
+def _keygate_base_url() -> str:
+    """TASK_MEE_019: Keygate admin API base URL (same server as the SDK API)."""
+    url = (os.environ.get("MEE_LICENSE_SERVER") or "").strip()
+    return url or "https://licenses.deepsim.ai:8443"
+
+
+# TASK_MEE_019: Keygate plan ID for the free Community/Academic plan
+# (verified in Keygate Postgres 2026-10-22, TASK_REQUEST §2).
+KEYGATE_COMMUNITY_PLAN_ID = "a2064f10-4deb-4eda-a8a7-5bf05aeac7a7"
 
 
 class AuthError(Exception):
@@ -121,6 +183,78 @@ class AuthAuditor:
 
     def record(self, client_ip: str, outcome: str, detail: str = "") -> None:
         self._logger.info("client=%s outcome=%s %s", client_ip, outcome, detail)
+
+
+class CommunityRequestRateLimiter:
+    """TASK_MEE_019 (AC6, CORE_CONTRACTS §3): rate limiter for the free
+    Community/Academic license request endpoint.
+
+    Policy (in-memory, TTL-pruned on every call — AD-3, no disk I/O):
+      - at most 1 request per email per 24 hours
+      - at most 3 requests per IP per hour
+    The two counters are independent (a single email from two IPs is allowed
+    twice; the same IP can serve up to 3 different emails per hour).
+
+    ``check()`` records a hit only when the request is allowed (denied
+    attempts do not extend the window) and returns ``(allowed,
+    retry_after_seconds)`` — the caller maps a denial to HTTP 429.
+    """
+
+    def __init__(self,
+                 email_limit: int = COMMUNITY_LIMIT_EMAIL,
+                 email_window_s: int = COMMUNITY_EMAIL_WINDOW_S,
+                 ip_limit: int = COMMUNITY_LIMIT_IP,
+                 ip_window_s: int = COMMUNITY_IP_WINDOW_S):
+        self.email_limit = email_limit
+        self.email_window_s = email_window_s
+        self.ip_limit = ip_limit
+        self.ip_window_s = ip_window_s
+        self._by_email: dict = {}  # email -> [timestamp, ...]
+        self._by_ip: dict = {}     # ip -> [timestamp, ...]
+        self._lock = threading.Lock()
+
+    # -- internals -------------------------------------------------------
+
+    def _prune(self, entries: list, window_s: float, now: float) -> list:
+        return [t for t in entries if now - t <= window_s]
+
+    # -- public API ------------------------------------------------------
+
+    def check(self, email: str, ip: str) -> tuple:
+        """Return ``(allowed, retry_after_seconds)`` for (email, ip).
+
+        On success the hit is recorded in both counters (per email and per IP)
+        so each limit tracks independently.  On denial nothing is recorded.
+        """
+        now = time.time()
+        email = (email or "").strip().lower()
+        ip = ip or "unknown"
+        with self._lock:
+            email_entries = self._prune(
+                self._by_email.get(email, []), self.email_window_s, now)
+            ip_entries = self._prune(
+                self._by_ip.get(ip, []), self.ip_window_s, now)
+            if len(email_entries) >= self.email_limit:
+                retry_after = int(max(1, round(
+                    email_entries[0] + self.email_window_s - now)))
+                self._by_email[email] = email_entries
+                self._by_ip[ip] = ip_entries
+                return (False, retry_after)
+            if len(ip_entries) >= self.ip_limit:
+                retry_after = int(max(1, round(
+                    ip_entries[0] + self.ip_window_s - now)))
+                self._by_email[email] = email_entries
+                self._by_ip[ip] = ip_entries
+                return (False, retry_after)
+            self._by_email[email] = email_entries + [now]
+            self._by_ip[ip] = ip_entries + [now]
+            return (True, 0)
+
+    def reset(self) -> None:
+        """Clear all counters (tests only)."""
+        with self._lock:
+            self._by_email.clear()
+            self._by_ip.clear()
 
 
 def decode_image_bgr(payload_b64: str) -> "np.ndarray":
@@ -208,6 +342,25 @@ class RemotedemoServer:
         self.active_connections = 0
         self._server = None
         self._auditor = AuthAuditor(self.config.auth_log_file)
+        # TASK_MEE_019: ensure _wslog exists before start_license_server()
+        # uses it (start() re-initialises it, but we need a safe default
+        # for the case where start_license_server() runs first or the
+        # WS port is taken and start() aborts early).
+        self._wslog = logging.getLogger("mee.remotedemo.ws")
+        # TASK_MEE_019 (AC6): free-request rate limiter (1/email/24h, 3/IP/h).
+        self._community_limiter = CommunityRequestRateLimiter()
+        # TASK_MEE_019 (AD-2): secondary HTTP server for the license POST
+        # endpoints (websockets' process_request hook cannot read bodies).
+        # Shares the same limiter instance so counts are unified.
+        self._license_server = LicenseHTTPServer(
+            self.config.license_http_port,
+            engine=engine,
+            keygate_api_key=_keygate_api_key(),
+            community_limiter=self._community_limiter,
+        )
+        # TASK_MEE_019 (AC3): shared LicenseClient for activate/deactivate
+        # (real Keygate calls — not simulated).
+        self._license_client = None
         # TASK_MEE_017 Task B (fix): per-connection audio buffers keyed by id(ws).
         # Browser sends 20 ms chunks continuously; we accumulate them here and
         # only run inference on a complete segment (>= AUDIO_INFERENCE_SAMPLES).
@@ -245,6 +398,9 @@ class RemotedemoServer:
         # TASK_MEE_030 (2026-09-27): process_request lets the funnel URL
         # (wss://host/) serve HTTP endpoints (/healthz) alongside the
         # WebSocket upgrade on the same port.
+        # TASK_MEE_019 (AD-2): bring up the license HTTP API in parallel
+        # with the WS server (fails soft — WS demo must still work).
+        self.start_license_server()
         self._server = await serve(
             self._handle,
             host=self.config.host,
@@ -276,9 +432,29 @@ class RemotedemoServer:
         await self._server.wait_closed()
 
     async def stop(self) -> None:
+        self.stop_license_server()
         if self._server is not None:
             self._server.close()
             self._server = None
+
+    def start_license_server(self) -> None:
+        """TASK_MEE_019: start the secondary license HTTP API (best-effort)."""
+        try:
+            self._license_server.start()
+        except OSError as exc:  # port taken etc. — demo still runs without it
+            self._wslog.error(
+                "TASK_MEE_019 license HTTP server failed to start on port %s: %s",
+                self.config.license_http_port, exc)
+            self._license_server = None
+
+    def stop_license_server(self) -> None:
+        """TASK_MEE_019: shut the secondary license HTTP API down."""
+        if self._license_server is not None:
+            try:
+                self._license_server.stop()
+            except Exception:  # noqa: BLE001 — shutdown must not raise
+                pass
+            self._license_server = None
 
     # -- HTTP endpoints on the same port (funnel URL) -------------------
 
@@ -310,6 +486,28 @@ class RemotedemoServer:
             return _res(b'{"status":"ok"}\n')
         # TASK_MEE_031 (2026-09-27): /token endpoint REMOVED.
         # Token is delivered out-of-band by the operator and entered manually.
+        # TASK_MEE_019 (R1, AC3): GET /license/status — real data from
+        # LicenseClient.status() (never raises — CORE_CONTRACTS §1).
+        if path == "/license/status":
+            try:
+                from mee.licensing.client import LicenseClient
+                client = LicenseClient()
+                payload = client.status()
+                body = _json.dumps({
+                    "status": payload.get("status"),
+                    "plan_id": payload.get("plan_id"),
+                    "plan_name": payload.get("plan_name"),
+                    "remaining_days": payload.get("remaining_days"),
+                    "offline": bool(payload.get("offline")),
+                    "device_id": payload.get("device_id"),
+                }).encode("utf-8")
+            except Exception as exc:  # noqa: BLE001 — endpoint must never 500-blank
+                body = _json.dumps({
+                    "status": "unknown", "plan_id": None, "plan_name": None,
+                    "remaining_days": None, "offline": True,
+                    "device_id": None, "error": str(exc)[:200],
+                }).encode("utf-8")
+            return _res(body)
         if path in ("/", ""):
             # TASK_MEE_030: plain HTTP GET on / serves the client page;
             # a WebSocket upgrade on / (Sec-WebSocket-Key header present)
@@ -636,6 +834,271 @@ class RemotedemoServer:
     def _infer(self, frame_bgr=None, audio=None) -> dict:
         """Call the engine exactly as the public API contract expects."""
         return self.engine.process(video_frame=frame_bgr, audio=audio)
+
+
+def _license_status_dict() -> dict:
+    """TASK_MEE_019: shape the GET /license/status body from LicenseClient.
+
+    Never raises (CORE_CONTRACTS §1) — any failure degrades to a JSON
+    "unknown" payload with an error note.
+    """
+    try:
+        from mee.licensing.client import LicenseClient
+        client = LicenseClient()
+        payload = client.status()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "unknown", "plan_id": None, "plan_name": None,
+            "remaining_days": None, "offline": True, "device_id": None,
+            "error": str(exc)[:200],
+        }
+    return {
+        "status": payload.get("status"),
+        "plan_id": payload.get("plan_id"),
+        "plan_name": payload.get("plan_name"),
+        "remaining_days": payload.get("remaining_days"),
+        "offline": bool(payload.get("offline")),
+        "device_id": payload.get("device_id"),
+    }
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")  # CORE_CONTRACTS §3
+
+
+def _issue_community_license(keygate_api_key: str, name: str, email: str,
+                             institution: str) -> dict:
+    """TASK_MEE_019 (R4, AC3): create a free Community/Academic license via
+    the Keygate admin API (server-side; the key never reaches the browser).
+    Returns ``(http_status, body_dict)``.
+    """
+    import requests
+    if not (name or "").strip() or len(name.strip()) < 2:
+        return 400, {"error": "name is required (min 2 characters)"}
+    if not (email or "").strip():
+        return 400, {"error": "email is required"}
+    if not _EMAIL_RE.match(email.strip()):
+        return 400, {"error": "email format invalid"}
+    institution = (institution or "").strip()
+    body = {
+        "product_id": None,  # filled below if the API demands it
+        "plan_id": KEYGATE_COMMUNITY_PLAN_ID,
+        "name": name.strip(),
+        "email": email.strip(),
+        "institution": institution or None,
+    }
+    try:
+        resp = requests.post(
+            _keygate_base_url() + "/api/v1/admin/licenses",
+            headers={"Authorization": "Bearer " + keygate_api_key,
+                     "Content-Type": "application/json"},
+            json={k: v for k, v in body.items() if v is not None},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        return 500, {"error": f"Keygate API unreachable: {_sanitize_err(exc)}"}
+    try:
+        data = resp.json()
+    except ValueError:
+        return 500, {"error": f"Keygate API returned non-JSON (HTTP {resp.status_code})"}
+    if resp.status_code == 200 and data.get("success", True):
+        lic = data.get("data") or data
+        key = (lic.get("license_key") or lic.get("key")
+               or (lic.get("license") or {}).get("license_key") or "")
+        if key:
+            return 200, {
+                "license_key": key,
+                "status": "trialing",
+                "message": "free Community/Academic license issued — activate it with the key below",
+            }
+        return 200, {
+            "license_key": None,
+            "status": "unknown",
+            "message": "license created (key not returned by server)",
+        }
+    err = data.get("error") or {}
+    msg = err.get("message") if isinstance(err, dict) else str(err)
+    return resp.status_code, {"error": msg or f"Keygate API error (HTTP {resp.status_code})"}
+
+
+def _sanitize_err(exc: Exception) -> str:
+    """Strip anything that looks like an embedded credential from error text."""
+    s = str(exc)
+    s = re.sub(r"(Bearer\s+)[A-Za-z0-9_\-]{8,}", r"\1***", s)
+    return s[:200]
+
+
+class LicenseHTTPServer:
+    """TASK_MEE_019 (AD-2): secondary stdlib HTTP server for the license API.
+
+    Serves the POST endpoints on ``0.0.0.0:port`` (GET /license/status is
+    also served here so one base URL works for the browser client):
+
+      GET  /license/status
+      POST /license/activate         {"key": "..."}
+      POST /license/deactivate       {}
+      POST /license/request-community {"name","email","institution"?}
+
+    Security (AC4/S3): the Keygate admin API key is held only in this class
+    (server-side).  All responses carry ``Cache-Control: no-store`` and
+    ``Access-Control-Allow-Origin: *`` (S7).
+    """
+
+    def __init__(self, port: int, engine=None,
+                 keygate_api_key: Optional[str] = None,
+                 license_client=None,
+                 community_limiter=None):
+        self.port = int(port)
+        self.engine = engine
+        self.keygate_api_key = keygate_api_key or _keygate_api_key()
+        self.license_client = license_client
+        self.community_limiter = community_limiter or CommunityRequestRateLimiter()
+        self._httpd = None
+        self._thread = None
+
+    # -- lifecycle -------------------------------------------------------
+
+    def start(self) -> threading.Thread:
+        """Bind + serve in a daemon thread.  Raises OSError if the port is taken."""
+        import http.server
+        outer = self
+
+        class _Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, fmt, *args):  # noqa: N802 — stdlib hook
+                try:
+                    logging.getLogger("mee.remotedemo.license_http").info(
+                        fmt, *args)
+                except Exception:  # noqa: BLE001
+                    pass
+
+            def _send(self, status: int, body: dict, extra_headers=None) -> None:
+                payload = _json.dumps(body).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store")
+                if extra_headers:
+                    for k, v in extra_headers.items():
+                        self.send_header(k, v)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def _read_body(self) -> dict:
+                try:
+                    length = int(self.headers.get("Content-Length", "0") or "0")
+                except ValueError:
+                    length = 0
+                if length <= 0:
+                    return {}
+                raw = self.rfile.read(min(length, 65536))
+                try:
+                    data = _json.loads(raw.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    return {}
+                return data if isinstance(data, dict) else {}
+
+            def do_OPTIONS(self):  # noqa: N802 — CORS preflight
+                self._send(204, {})
+
+            def do_GET(self):  # noqa: N802
+                path = self.path.split("?", 1)[0]
+                if path == "/license/status":
+                    self._send(200, _license_status_dict())
+                    return
+                if path in ("/healthz", "/health"):
+                    self._send(200, {"status": "ok"})
+                    return
+                self._send(404, {"error": "not found"})
+
+            def do_POST(self):  # noqa: N802
+                path = self.path.split("?", 1)[0]
+                body = self._read_body()
+                client_ip = self.client_address[0] if self.client_address else "unknown"
+                if path == "/license/activate":
+                    self._license_activate(body)
+                elif path == "/license/deactivate":
+                    self._license_deactivate()
+                elif path == "/license/request-community":
+                    self._license_request_community(body, client_ip)
+                else:
+                    self._send(404, {"error": "not found"})
+
+            # -- route handlers (delegate to outer state) -----------------
+
+            def _license_activate(self, body: dict) -> None:
+                key = (body.get("key") or "").strip()
+                if not key:
+                    self._send(400, {"valid": False,
+                                    "message": "missing 'key' field"})
+                    return
+                try:
+                    client = outer._license_client()
+                    result = client.activate(key)
+                    self._send(200, {
+                        "valid": True,
+                        "status": getattr(result, "license_status", None)
+                                 or getattr(result, "status", None),
+                        "plan_name": getattr(result, "plan_name", None),
+                        "message": "activated",
+                    })
+                except Exception as exc:  # noqa: BLE001
+                    self._send(500, {"valid": False, "message": _sanitize_err(exc)})
+
+            def _license_deactivate(self) -> None:
+                try:
+                    client = outer._license_client()
+                    client.deactivate()
+                    self._send(200, {"status": "deactivated",
+                                    "message": "license deactivated"})
+                except Exception as exc:  # noqa: BLE001
+                    self._send(500, {"status": "error", "message": _sanitize_err(exc)})
+
+            def _license_request_community(self, body: dict, client_ip: str) -> None:
+                name = str(body.get("name") or "")
+                email = str(body.get("email") or "")
+                institution = str(body.get("institution") or "")
+                allowed, retry_after = outer.community_limiter.check(email, client_ip)
+                if not allowed:
+                    self._send(429, {
+                        "retry_after": retry_after,
+                        "message": "too many requests — try again later",
+                    }, extra_headers={"Retry-After": str(retry_after)})
+                    return
+                if not outer.keygate_api_key:
+                    self._send(500, {"error": "KEYGATE_API_KEY not configured on server"})
+                    return
+                status, payload = _issue_community_license(
+                    outer.keygate_api_key, name, email, institution)
+                self._send(status, payload)
+
+        self._httpd = http.server.ThreadingHTTPServer(
+            ("0.0.0.0", self.port), _Handler)
+        self._httpd.daemon_threads = True
+        self._thread = threading.Thread(
+            target=self._httpd.serve_forever,
+            name="mee-license-http", daemon=True)
+        self._thread.start()
+        return self._thread
+
+    def stop(self) -> None:
+        """Shut the HTTP server down (idempotent)."""
+        if self._httpd is not None:
+            try:
+                self._httpd.shutdown()
+                self._httpd.server_close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._httpd = None
+            self._thread = None
+
+    # -- client factory ----------------------------------------------------
+
+    def _license_client(self):
+        """Lazily build a LicenseClient (imports the licensing package)."""
+        if self.license_client is None:
+            from mee.licensing.client import LicenseClient
+            self.license_client = LicenseClient()
+        return self.license_client
 
 
 async def run_server(engine=None, config: Optional[RemotedemoConfig] = None) -> None:
