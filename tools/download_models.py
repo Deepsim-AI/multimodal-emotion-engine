@@ -28,6 +28,16 @@ Usage:
     python3 tools/download_models.py --no-link       # don't create the
                                                       backend symlinks
 
+Model download URL override (for China-accessible mirrors):
+
+    export MEE_MODEL_DOWNLOAD_URL=https://hf-mirror.com
+    # When set, any https://huggingface.co/ URLs are rewritten to
+    # https://hf-mirror.com/<path> automatically.
+
+    export MEE_GITHUB_MIRROR=https://ghproxy.net
+    # When set, any https://github.com/.../raw/ URLs are rewritten to
+    # the mirror host (e.g. ghproxy.net, gg.github.la, etc.)
+
 Idempotent: existing files with matching size are skipped; --force re-downloads.
 """
 from __future__ import annotations
@@ -44,6 +54,34 @@ from typing import Optional
 
 REPO = Path(__file__).resolve().parent.parent
 MODELS = REPO / "models"
+
+# ---------------------------------------------------------------------------
+# URL mirroring helpers (China-accessible mirrors)
+# ---------------------------------------------------------------------------
+
+def _mirror_hf_url(url: str) -> str:
+    """Rewrite a huggingface.co resolve URL to HF Mirror if configured."""
+    prefix = os.environ.get("MEE_MODEL_DOWNLOAD_URL") or os.environ.get("HF_MIRROR")
+    if prefix and url.startswith("https://huggingface.co/"):
+        return prefix.rstrip("/") + "/" + url[len("https://huggingface.co/"):]
+    return url
+
+
+def _mirror_github_url(url: str) -> str:
+    """Rewrite a github.com/.../raw/ URL to a configured mirror if present."""
+    mirror = os.environ.get("MEE_GITHUB_MIRROR") or os.environ.get("GITHUB_PROXY")
+    if mirror and url.startswith("https://github.com/") and "/raw/" in url:
+        # Convert https://github.com/org/repo/raw/branch/path -> mirror/org/repo/raw/branch/path
+        return mirror.rstrip("/") + "/" + url[len("https://github.com/"):]
+    return url
+
+
+def _resolve_urls(url: str) -> str:
+    """Apply all URL rewrite rules in order."""
+    url = _mirror_hf_url(url)
+    url = _mirror_github_url(url)
+    return url
+
 
 # ---------------------------------------------------------------------------
 # Model registry
@@ -170,9 +208,13 @@ def target_dir(model: Model) -> Path:
 
 def fetch(url: str, dest: Path) -> None:
     """Stream a URL to dest with resume support."""
+    # Resolve mirrors before fetching
+    resolved_url = _resolve_urls(url)
     tmp = dest.with_suffix(dest.suffix + ".part")
     done = tmp.stat().st_size if tmp.exists() else 0
-    req = urllib.request.Request(url, headers={"User-Agent": "MEE-download-models/1.0"})
+    req = urllib.request.Request(resolved_url, headers={
+        "User-Agent": "MEE-download-models/1.0",
+    })
     if done:
         req.add_header("Range", f"bytes={done}-")
     with urllib.request.urlopen(req) as resp:
@@ -273,7 +315,18 @@ def verify(model: Model) -> list:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Populate the canonical models/ tree.")
+    ap = argparse.ArgumentParser(
+        description="Populate the canonical models/ tree.",
+        epilog=(
+            "Model download mirrors (via environment variables):\n"
+            "  MEE_MODEL_DOWNLOAD_URL=https://hf-mirror.com\n"
+            "    Rewrites https://huggingface.co/ → $MEE_MODEL_DOWNLOAD_URL/\n"
+            "  MEE_GITHUB_MIRROR=https://ghproxy.net\n"
+            "    Rewrites https://github.com/org/repo/raw/branch/path\n"
+            "         → $MEE_GITHUB_MIRROR/org/repo/raw/branch/path\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     ap.add_argument("--only", choices=[m.key for m in ALL_MODELS + OPT_IN] + ["all"],
                     help="process a single subfolder (default: all defaults)")
     ap.add_argument("--include-opt-in", action="store_true",
@@ -296,24 +349,35 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="print what would happen, change nothing")
     args = ap.parse_args()
 
-    models = []
+    models_to_run = []
     if args.only and args.only != "all":
-        models = [m for m in ALL_MODELS + OPT_IN if m.key == args.only]
+        models_to_run = [m for m in ALL_MODELS + OPT_IN if m.key == args.only]
     else:
-        models = list(ALL_MODELS)
+        models_to_run = list(ALL_MODELS)
         if args.include_opt_in:
-            models += OPT_IN
+            models_to_run += OPT_IN
 
-    if not models:
+    if not models_to_run:
         ap.error("no models selected")
+
+    # Print mirror configuration
+    hf_mirror = os.environ.get("MEE_MODEL_DOWNLOAD_URL") or os.environ.get("HF_MIRROR")
+    gh_mirror = os.environ.get("MEE_GITHUB_MIRROR") or os.environ.get("GITHUB_PROXY")
+    mirror_info = []
+    if hf_mirror:
+        mirror_info.append(f"HF URL → {hf_mirror}/<path>")
+    if gh_mirror:
+        mirror_info.append(f"GitHub raw → {gh_mirror}/<path>")
 
     print(f"Canonical models root: {MODELS}")
     print(f"Mode: {'mirror (copy local)' if args.mirror else 'download'}"
-          f"{'  + verify' if args.verify else ''}")
+          f"{'  + verify' if args.verify else ''}"
+          + (f"\nMirror: {'; '.join(mirror_info)}" if mirror_info else "")
+          )
     print()
 
     ok = True
-    for model in models:
+    for model in models_to_run:
         print(f"== {model.key} — {model.title} ==")
         print(f"   backend: {model.backend}")
         print(f"   license: {model.license}")
@@ -325,8 +389,13 @@ def main() -> int:
         if args.dry_run:
             for f in model.files:
                 present = (MODELS / model.key / f.name).exists()
-                src = f.mirror if args.mirror else (f.url or "(no url)")
-                print(f"   {'[present] ' if present else '[fetch]   '} {f.name}  <- {src}")
+                src_raw = f.url or "(no url)"
+                src_resolved = _resolve_urls(src_raw) if src_raw != "(no url)" else src_raw
+                if args.mirror:
+                    src_display = f.mirror or "(no mirror source)"
+                    print(f"   {'[present] ' if present else '[mirror]  '} {f.name}  <- {src_display}")
+                else:
+                    print(f"   {'[present] ' if present else '[fetch]   '} {f.name}  <- {src_resolved}")
             print()
             continue
         for f in model.files:

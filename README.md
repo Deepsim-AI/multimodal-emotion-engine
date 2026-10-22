@@ -140,11 +140,13 @@ the MediaPipe pip package that ships vision face-detection.
 
 See [`docs/THIRD_PARTY_LICENSES.md`](docs/THIRD_PARTY_LICENSES.md) for the complete inventory of third-party components used by MEE, including their licenses and commercial-use status.
 
+The MEE core package is distributed under the **Deepsim Commercial Software License v1.1** (`LICENSE.txt`). Previous versions are retained in `LICENSE_1.0` for reference. License activation is managed via the `mee-lic` CLI against the Keygate server (see `docs/development/reports/TASK_MEE_015/` for the Gate C specification).
+
 ### Summary
 
 | Category | License | Commercial Use? |
 |----------|---------|-----------------|
-| Core package code | Apache-2.0 ✅ | Yes |
+| Core package code | Deepsim Commercial Software License v1.1 (proprietary) — see `LICENSE.txt` | Yes (licensed) |
 | Vision pipeline (retina-face, face-alignment, EmotiEffLib) | MIT/Apache-2.0 ✅ | Yes |
 | Voice pipeline (SpeechBrain RavNet) | Apache-2.0 ✅ | Yes |
 | OpenCV, librosa, streamlit, etc. | Various open-source ✅ | Yes |
