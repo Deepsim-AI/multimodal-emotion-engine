@@ -21,6 +21,18 @@
 | **TASK_MEE_009** | End-to-End Validation | 9 | 004, 005, 006, 007 | Ready |
 | **TASK_MEE_010** | Jetson AGX Orin Deployment | 10 | 009 | Ready |
 | **TASK_MEE_011** | Packaging & Documentation | 11 | 010 | Ready |
+| **TASK_MEE_012** | Vision Performance Benchmark | — | 011 | CLOSED (2026-09-23) |
+| **TASK_MEE_013** | Detection Frequency Control | — | 012 | CLOSED (G4 APPROVED) |
+| **TASK_MEE_014** | Remote Access / Demo Distribution | 6 | 010, 011 | CLOSED (Phase 6 complete) |
+| **TASK_MEE_016** | CUDA Compatibility — RetinaFace Detection | — | 013 | CLOSED |
+| **TASK_MEE_017** | Camera Toggle + Voice Emotion "No Data" Fix | — | 016 | CLOSED |
+| **TASK_MEE_018** | Remote Demo Public Access (Tailscale Funnel) + Stability | — | 017 | CLOSED (superseded by 035) |
+| **TASK_MEE_019** | License Plan Selection & Purchase UI | 8 | 015 | CLOSED (v0.3.0) |
+| **TASK_MEE_020** | License Hardening & Signed Distribution | Post-019 | 015, 019 | DRAFTED, awaiting CTO G1 |
+| **TASK_MEE_035** | Remote Demo Public Access Migration to Pangolin | — | 018 | CLOSED (supersedes 018) |
+
+> Registry table is maintained by PM. Tasks 012/013/014 use a lighter gate footprint; IDs 021–034
+> are currently unused. See per-task folders for detailed status.
 
 ```text
 TASK_MEE_001
