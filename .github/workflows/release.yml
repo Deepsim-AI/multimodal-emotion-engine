@@ -115,7 +115,7 @@ jobs:
       - name: Show signing outputs
         run: |
           echo "--- dist/ ---"; ls -la dist/
-          echo "--- sigstore bundles ---"; find . -maxdepth 2 -name "*.sigstore" -o -name "rootbundle.json" | head
+          echo "--- sigstore bundles ---"; find . -maxdepth 2 -name "*.sigstore.json" | head
           echo "--- manifest ---"; cat MEE_RELEASE_MANIFEST.json
 
       - name: Upload release artifacts
@@ -127,6 +127,6 @@ jobs:
             dist/*.tar.gz
             MEE_RELEASE_MANIFEST.json
             MEE_INTEGRITY_HASHES.txt
-            dist/*.sigstore/**
+            *.sigstore.json
           draft: false
           prerelease: false

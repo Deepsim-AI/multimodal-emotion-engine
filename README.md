@@ -19,6 +19,24 @@ MEE processes webcam video and microphone audio to produce:
 - **Modular** — vision and voice models are interchangeable behind a stable API
 - **Independent** — does not depend on the AI Companion Book Chapter 15
 
+## License & Access
+
+**MEE is a commercial product.** The core package (`mee/`) is distributed under the
+**Deepsim Commercial Software License v1.1** (proprietary). A valid license key is
+required to run inference — `pip install` gives you the code, but the engine is
+locked until you activate a key.
+
+- **Free (Community/Academic):** request a key via the License UI in the remote
+demo, or email `licensing@deepsim.com`. No credit card required.
+- **Paid plans (Developer, Commercial, Enterprise, OEM/Embedded):** see the
+[Licensing & Plans](#licensing--plans-task_mee_019) section below for checkout links.
+- **Verify a release:** every GitHub release ships with a Sigstore signature bundle
+  (`.sigstore.json`) and a SHA-256 manifest. Verify with:
+  ```bash
+  pip install sigstore
+  ./tools/verify_release.sh multimodal_emotion_engine-*.whl MEE_RELEASE_MANIFEST.json multimodal_emotion_engine-*.whl.sigstore.json
+  ```
+
 ## Install
 
 ### Core package (includes basic face detection)

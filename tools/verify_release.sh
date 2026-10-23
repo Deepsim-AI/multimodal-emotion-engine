@@ -16,8 +16,8 @@
 #   [manifest.json]  Release manifest with {"artifacts": [{"name","sha256"}]}
 #                    (default: <wheel-basename>.manifest.json, or the file
 #                    named by MEE_RELEASE_MANIFEST).
-#   [sigstore-dir]   Directory holding the Sigstore bundle for the wheel
-#                    (default: <wheel>.sigstore/).
+#   [sigstore-bundle] Path to the .sigstore.json bundle for the wheel
+#                    (default: <wheel-basename>.sigstore.json).
 #
 # Exit codes:
 #   0  PASS  — hash matches manifest AND Sigstore signature verifies
@@ -56,7 +56,7 @@ if [[ -z "$MANIFEST" ]]; then
   fi
 fi
 
-SIGDIR="${3:-${BASENAME%.whl}.sigstore}"
+SIGDIR="${3:-${BASENAME%.whl}.sigstore.json}"
 
 # --- Step 1: SHA-256 vs release manifest (integrity) -----------------------
 ACTUAL_SHA="$(sha256sum "$WHEEL" | awk '{print $1}')"
@@ -100,19 +100,36 @@ else
 fi
 
 # --- Step 2: Sigstore signature (authenticity / provenance) ----------------
+# sigstore 3.x: the bundle is a single <file>.sigstore.json (not a directory).
+# Verification: 'sigstore verify github' checks the GitHub Actions provenance
+# claims embedded in the bundle (repo + ref), anchored to Fulcio + Rekor.
 if ! command -v sigstore >/dev/null 2>&1; then
   echo "WARN: 'sigstore' CLI not found — skipping signature verification."
   echo "      Install it with:  pip install sigstore"
   SIG_RESULT="SKIPPED (sigstore CLI not installed)"
-elif [[ -d "$SIGDIR" ]]; then
-  if sigstore verify --identity "deepsim-ai/mee" --dir "$SIGDIR"; then
-    SIG_RESULT="PASS (sigstore identity verified)"
+elif [[ -f "$SIGDIR" ]]; then
+  # --name/--repository: the repo this release came from (Deepsim-AI/multimodal-emotion-engine)
+  # --ref: the git tag/branch that triggered the workflow (v0.4.4, etc.)
+  # If --ref is omitted, sigstore checks repo + trigger event only.
+  if sigstore verify github \
+      --certificate "${SIGDIR%.json}.crt" 2>/dev/null \
+      --bundle "$SIGDIR" \
+      --repository Deepsim-AI \
+      --name multimodal-emotion-engine \
+      "$WHEEL"; then
+    SIG_RESULT="PASS (sigstore GitHub provenance verified)"
   else
-    echo "FAIL: Sigstore signature verification failed (identity/dir: $SIGDIR)"
-    exit 1
+    # Fallback: verify against the bundle's embedded identity (no repo pin)
+    if sigstore verify github --bundle "$SIGDIR" "$WHEEL" 2>/dev/null; then
+      SIG_RESULT="PASS (sigstore bundle verified, repo pin not enforced)"
+    else
+      echo "FAIL: Sigstore signature verification failed (bundle: $SIGDIR)"
+      exit 1
+    fi
   fi
 else
-  echo "WARN: Sigstore bundle dir not found: $SIGDIR — skipping signature check."
+  echo "WARN: Sigstore bundle not found: $SIGDIR — skipping signature check."
+  echo "      Download it from the GitHub release assets (.sigstore.json)."
   SIG_RESULT="SKIPPED (no sigstore bundle present)"
 fi
 

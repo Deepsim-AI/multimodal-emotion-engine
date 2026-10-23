@@ -1,7 +1,7 @@
-# Third-Party Component License Inventory — MEE v0.1.0
+# Third-Party Component License Inventory — MEE v0.4.4
 
 **Date:** 2026-09-22  
-**Version:** 0.1.0  
+**Version:** 0.4.4  
 
 ---
 
