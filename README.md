@@ -1,4 +1,4 @@
-# Multimodal Emotion Engine (MEE) v0.1.0
+# Multimodal Emotion Engine (MEE) v0.4.3
 
 An independent, locally-deployable AI capability that estimates a user's affective state from multiple input modalities: visual (facial expression) and voice (acoustic characteristics).
 
@@ -114,7 +114,7 @@ multimodal-emotion-engine/
 
 ## Status
 
-**✅ v0.1.0 — All tasks complete** (G1→G5 for all MEE_001 through MEE_011)
+**✅ v0.4.3 — All tasks complete** (G1→G5 for all MEE tasks through MEE_020; signed distribution pipeline operational)
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design documentation.
 
