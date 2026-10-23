@@ -39,23 +39,40 @@ demo, or email `licensing@deepsim.com`. No credit card required.
 
 ## Install
 
-### Core package (includes basic face detection)
+MEE is distributed as a **signed wheel from GitHub Releases** (not on PyPI).
+Download the latest release assets, then install the wheel:
+
 ```bash
-pip install multimodal-emotion-engine
+# 1. Download the latest release artifacts
+#    (wheel, sdist, MEE_RELEASE_MANIFEST.json, MEE_INTEGRITY_HASHES.txt, .sigstore.json bundles)
+git clone --depth 1 https://github.com/Deepsim-AI/multimodal-emotion-engine.git
+cd multimodal-emotion-engine
+
+# 2. Install from the signed wheel in the GitHub release (preferred)
+#    Grab the .whl from https://github.com/Deepsim-AI/multimodal-emotion-engine/releases
+pip install multimodal_emotion_engine-0.4.4-py3-none-any.whl
+
+#    — or install from source (repo checkout) —
+pip install .
 ```
 
 ### With optional feature sets
 ```bash
 # Full vision + voice pipeline
-pip install multimodal-emotion-engine[vision]
-pip install multimodal-emotion-engine[voice]
+pip install ".[vision]"
+pip install ".[voice]"
 
 # Demo UI (Streamlit-based)
-pip install multimodal-emotion-engine[demo]
+pip install ".[demo]"
 
 # Development/testing
-pip install multimodal-emotion-engine[dev]
+pip install ".[dev]"
 ```
+
+> **Tip:** to install a specific release, download the matching `.whl` from the
+> [Releases](https://github.com/Deepsim-AI/multimodal-emotion-engine/releases) page and run
+> `pip install <that-file>.whl`. The optional extras above work the same way once the
+> base wheel is installed (e.g. `pip install multimodal_emotion_engine-0.4.4-py3-none-any.whl[vision]`).
 
 ### Download model weights
 The production weights live in the canonical `models/` tree (not shipped with the
