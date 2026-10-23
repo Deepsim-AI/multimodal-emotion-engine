@@ -128,5 +128,5 @@ jobs:
             MEE_RELEASE_MANIFEST.json
             MEE_INTEGRITY_HASHES.txt
             dist/*.sigstore/**
-        draft: false
-        prerelease: false
+          draft: false
+          prerelease: false
