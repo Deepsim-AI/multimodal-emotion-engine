@@ -28,7 +28,7 @@
 | **TASK_MEE_017** | Camera Toggle + Voice Emotion "No Data" Fix | — | 016 | CLOSED |
 | **TASK_MEE_018** | Remote Demo Public Access (Tailscale Funnel) + Stability | — | 017 | CLOSED (superseded by 035) |
 | **TASK_MEE_019** | License Plan Selection & Purchase UI | 8 | 015 | CLOSED (v0.3.0) |
-| **TASK_MEE_020** | License Hardening & Signed Distribution | Post-019 | 015, 019 | DRAFTED, awaiting CTO G1 |
+| **TASK_MEE_020** | License Hardening & Signed Distribution | 9 | 015, 019 | CLOSED (v0.4.0) |
 | **TASK_MEE_035** | Remote Demo Public Access Migration to Pangolin | — | 018 | CLOSED (supersedes 018) |
 
 > Registry table is maintained by PM. Tasks 012/013/014 use a lighter gate footprint; IDs 021–034

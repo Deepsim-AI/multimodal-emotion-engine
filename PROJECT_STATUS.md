@@ -1,7 +1,7 @@
 # MEE Project Status
 
-**Last Updated:** 2026-09-23  
-**Phase:** Phase 5 (End-to-End Validation) → **Complete**
+**Last Updated:** 2026-10-22
+**Phase:** Phase 9 (License Hardening & Signed Distribution) → **Complete**
 
 ---
 
@@ -22,6 +22,7 @@
 | MEE_014 | Remote Browser Demo Client | ✅ G4 Approved — **CLOSED** (G5 pending user remote confirm) | 2026-09-23 |
 | MEE_015 | License Integration (Gate C) | ✅ **G4 APPROVED — CLOSED (v0.2.0)** | 2026-10-21 |
 | MEE_019 | License Plan Selection & Purchase UI | ✅ **G4 APPROVED — CLOSED (v0.3.0)** | 2026-10-22 |
+| MEE_020 | License Hardening & Signed Distribution | ✅ **G4 APPROVED — CLOSED (v0.4.0)** | 2026-10-22 |
 
 
 ---
@@ -39,22 +40,32 @@
 | **Phase 6** | **Remote Access / Demo Distribution** | **✅ Complete** | **MEE_014** |
 | **Phase 7** | **License Integration (Gate C)** | **✅ COMPLETE** | **MEE_015** |
 | **Phase 8** | **License Plan Selection & Purchase UI** | **✅ COMPLETE** | **MEE_019** |
+| **Phase 9** | **License Hardening & Signed Distribution** | **✅ COMPLETE** | **MEE_020** |
 
 
 ## Current Focus
 
-All core phases are complete. The multimodal emotion engine is fully validated end-to-end with synthetic data across 5 scenarios (neutral, happy, sad, frustrated/conflict, cross-over). 106 tests passing.
+All core phases are complete. The multimodal emotion engine is fully validated end-to-end with synthetic data across 5 scenarios (neutral, happy, sad, frustrated/conflict, cross-over). 136 licensing-integration tests pass.
 
-**Current task: MEE_019 (License Plan Selection & Purchase UI) — G5 closure COMPLETE, released as v0.3.0.**
+**Current task: MEE_020 (License Hardening & Signed Distribution) — CLOSED (v0.4.0).**
 
-- Keygate live instance: `https://licenses.deepsim.ai:8443` (healthy, 2 active MEE licenses, both encrypted at rest).
-- License of record: `LICENSE.txt` (Deepsim Commercial Software License v1.1). `LICENSE_1.0` retained for reference.
-- Full `mee/licensing/` package shipped: LicenseClient (activate/verify/status/deactivate), Keygate feature-driven entitlements (single code path, no plan_name matching), ed25519 offline fallback, 14-day trial lifecycle, `mee-lic` CLI, engine integration. 80 licensing tests + 170 regression tests pass; frozen contracts 0-line diff.
-- 47 requirements (R1–R47) covered; G4 APPROVED (all 20 CTO checks pass).
+All gates G0–G5 complete. Hardened client-side license enforcement with a bytecode integrity
+self-check and added verifiable Sigstore signed distribution.
 
-**Next in sequence (after MEE_015 closes):**
-- **MEE_010** — Jetson AGX Orin Deployment — edge optimization and performance measurements
-- **MEE_011** — Packaging & Documentation — final release polish
+- Bytecode integrity self-check (`mee/licensing/integrity.py`) + `LicenseIntegrityError` wired into
+  the engine gate (fail-safe, C10/C11 — block inference on any integrity failure).
+- Sigstore (Fulcio, keyless) signed release pipeline (`.github/workflows/release.yml`) + dual-anchored
+  integrity (C9, anchor in `.dist-info/`) + `tools/verify_release.sh` + `tools/generate_integrity_anchor.py`.
+- Docs: `docs/licensing/offline.md` (offline grace window), `docs/licensing/privacy.md` (no telemetry).
+- Tests: 20 new (15 integrity + 5 offline matrix); existing licensing suite 113 pass — **136 total, 0 regressions**.
+  (Full `pytest tests/` core-dumps on the known torch-voice native collision; run per-file.)
+- Frozen licensing contracts (client/offline/config) unchanged in behaviour — 0-line core diff.
+- Version 0.3.0 → 0.4.0.
+- Out of scope (tracked): Keygate `RELEASE_KEY_ENCRYPTION_KEY` unset (plaintext keys at rest) — separate task, C6/AC7.
+
+**Next in sequence (after MEE_019 closes):**
+- No open MEE tasks currently. Gate B (Keygate license enforcement) is deployed; remaining work is
+  the separate `RELEASE_KEY_ENCRYPTION_KEY` server-side remediation.
 
 ## Blockers
 

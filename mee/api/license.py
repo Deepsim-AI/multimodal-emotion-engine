@@ -21,6 +21,7 @@ from ..licensing.errors import (
     ActivationLimitError,
     LicenseClientError,
     LicenseExpiredError,
+    LicenseIntegrityError,
 )
 from ..licensing.results import VerificationResult
 
@@ -63,5 +64,6 @@ __all__ = [
     "LicenseClientError",
     "ActivationLimitError",
     "LicenseExpiredError",
+    "LicenseIntegrityError",
     "VerificationResult",
 ]

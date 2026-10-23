@@ -9,6 +9,7 @@ from mee.api.license import (
     LicenseClient,
     LicenseClientError,
     LicenseExpiredError,
+    LicenseIntegrityError,
     LicensingConfig,
     VerificationResult,
     license_status,
@@ -24,5 +25,6 @@ __all__ = [
     "LicenseClientError",
     "ActivationLimitError",
     "LicenseExpiredError",
+    "LicenseIntegrityError",
     "VerificationResult",
 ]

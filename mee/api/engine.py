@@ -372,6 +372,18 @@ class EmotionEngine:
             is_deactivated,
         )
 
+        # TASK_MEE_020 (Phase C, step C2): bytecode integrity self-check
+        # (CTO_PLAN §8). Runs BEFORE license verification — fail-safe gate.
+        # When the check is active (signed release, or MEE_INTEGRITY_CHECK=1),
+        # it raises LicenseIntegrityError (subclass of LicenseExpiredError) on
+        # tamper / corrupted install (C10/C11: block inference, never allow).
+        # When the check is off (default in a source checkout / dev), this is a
+        # no-op so the dev/test baseline is unaffected (additive control).
+        # Development opt-out / recovery escape hatch: MEE_INTEGRITY_CHECK=0.
+        # See docs/licensing/integrity.md.
+        from ..licensing.integrity import verify_installed_integrity
+        verify_installed_integrity()
+
         if self._license_client is None:
             self._license_client = LicenseClient(LicensingConfig())
 

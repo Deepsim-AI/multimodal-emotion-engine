@@ -34,3 +34,28 @@ class LicenseExpiredError(Exception):
     """Raised from ``EmotionEngine.process()`` when no valid license is
     available (expired trial, or no valid online/offline license) (R10, R15).
     """
+
+
+class LicenseIntegrityError(LicenseExpiredError):
+    """Raised from ``EmotionEngine.process()`` when the bytecode integrity
+    self-check detects a tampered or corrupted installation (TASK_MEE_020).
+
+    Subclass of :class:`LicenseExpiredError` so that existing error-handling
+    paths (``except LicenseExpiredError``) remain valid — the two failure
+    modes are indistinguishable to the caller (inference is blocked either
+    way). Fail-safe binding rules C10/C11 (Decision #4, CTO_PLAN §5):
+
+    - C10: integrity-check error / cannot read anchor → **block**
+    - C11: missing manifest / anchor → **block** (never default to allow)
+
+    The only permitted pass-through is C12: network down + valid offline
+    token (handled by the licensing client, not by the integrity check).
+    """
+
+    def __init__(self,
+                 message: str = (
+                     "License integrity check failed. The installation may be "
+                     "tampered or corrupted. Reinstall MEE from the official "
+                     "signed release.")):
+        super().__init__(message)
+        self.integrity_failure: bool = True

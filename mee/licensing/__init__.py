@@ -5,6 +5,7 @@ Public exports (re-exported by ``mee.api`` for the public API surface):
 - :class:`VerificationResult` — rich verify() return (R28)
 - :class:`LicenseClientError` / :class:`ActivationLimitError` (R1, R38)
 - :class:`LicenseExpiredError` — raised from ``EmotionEngine.process()`` (R10, R15)
+- :class:`LicenseIntegrityError` — raised on tamper detection (TASK_MEE_020, C10/C11)
 - :class:`LicensingConfig` / :class:`TrialConfig` (R2, R31)
 """
 
@@ -16,6 +17,7 @@ from .errors import (
     ActivationLimitError,
     LicenseClientError,
     LicenseExpiredError,
+    LicenseIntegrityError,
 )
 from .results import VerificationResult
 
@@ -26,5 +28,6 @@ __all__ = [
     "ActivationLimitError",
     "LicenseClientError",
     "LicenseExpiredError",
+    "LicenseIntegrityError",
     "VerificationResult",
 ]

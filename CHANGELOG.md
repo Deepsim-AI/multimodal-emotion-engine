@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.0] — 2026-10-22
+
+### Added
+
+**MEE_020 — License Hardening & Signed Distribution — v0.4.0 (**G0–G5 complete, CLOSED**):**
+- **Bytecode integrity self-check** (`mee/licensing/integrity.py`): SHA-256 digests over the four critical licensing files (`mee/api/engine.py`, `mee/licensing/client.py`, `mee/licensing/offline.py`, `mee/licensing/errors.py`) compared against an external anchor. Fail-safe: missing/malformed/tampered anchor → `LicenseIntegrityError` (inference blocked, C10/C11 — never default to allow).
+- **New exception** `LicenseIntegrityError(LicenseExpiredError)` in `mee/licensing/errors.py` — subclass so existing `except LicenseExpiredError` paths remain valid; re-exported from `mee.api` and `mee.licensing`.
+- **Engine gate hardened** (`mee/api/engine.py::_license_check`): `verify_installed_integrity()` now runs **before** license verification. Additive-control model: off by default in a source checkout (dev-friendly), on by default in a signed release (build-time flag `MEE_INTEGRITY_ENFORCE`), `MEE_INTEGRITY_CHECK=0/1` runtime override.
+- **Sigstore signed distribution** (Decision #2, keyless/Fulcio): new `.github/workflows/release.yml` builds wheel+sdist, embeds the integrity anchor in `.dist-info/`, computes a SHA-256 `MEE_RELEASE_MANIFEST.json`, signs all artifacts with Sigstore, and publishes them to a GitHub release. `sigstore-python` is CI-only (zero new runtime deps, NFR1).
+- **Dual anchoring** (Decision #3, C9-compliant): external signed release manifest (primary) + embedded `MEE_INTEGRITY_HASHES.txt` in `.dist-info/` (offline fallback).
+- **Customer verification** `tools/verify_release.sh`: single PASS/FAIL command checking SHA-256 against the manifest + Sigstore signature. `tools/generate_integrity_anchor.py`: deterministic anchor generation (CLI + pipeline).
+- **Documentation** (`docs/licensing/`): `offline.md` (offline grace-window behaviour, C12 matrix), `privacy.md` (complete outbound-call inventory — no telemetry, C7).
+- **Tests:** 20 new tests — `tests/test_integrity.py` (15) + `tests/test_licensing_offline_matrix.py` (5). Existing licensing suite 113 pass; licensing-integration total **136 passed, 0 regressions**.
+- **Regression:** frozen licensing contracts (client/offline/config) unchanged in behaviour — 0-line core diff.
+- **Out of scope (tracked):** Keygate `RELEASE_KEY_ENCRYPTION_KEY` unset (plaintext keys at rest) — separate Keygate server-side remediation, C6/AC7.
+- Version bump: 0.3.0 → 0.4.0 (minor — new integrity + signed-distribution capability).
+- **Phase 9 (License Hardening & Signed Distribution) now COMPLETE.**
+
 ## [v0.3.0] — 2026-10-22
 
 ### Added
