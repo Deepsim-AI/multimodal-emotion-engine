@@ -8,14 +8,13 @@ version = "0.4.0"
 description = "Multimodal emotion estimation from visual and voice inputs — commercially safe, Jetson-ready"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "See LICENSE.txt"}
+license = "SEE LICENSE IN LICENSE.txt"
 license-files = ["LICENSE.txt", "docs/THIRD_PARTY_LICENSES.md"]
 authors = [{name = "Deepsim-AI", email = "ai@deepsim.com"}]
 keywords = ["emotion", "multimodal", "Jetson", "facial-expression", "voice-emotion", "edge-computing"]
 
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: Other License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
