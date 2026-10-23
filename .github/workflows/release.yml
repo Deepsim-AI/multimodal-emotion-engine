@@ -16,7 +16,7 @@
 
 name: release-sigstore-sign
 
-on:
+'on':
   push:
     tags:
       - "v*"
