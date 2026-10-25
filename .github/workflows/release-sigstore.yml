@@ -1,7 +1,11 @@
 name: release-sigstore-sign
 
-# Triggered manually (like DS-EO's approach) to avoid push-trigger issues
+# TASK_MEE_022 G2-1.5: tag-push trigger restored (required for signed release
+# pipeline) + workflow_dispatch retained for dry runs.
 "on":
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -83,6 +87,32 @@ jobs:
             echo "signing $artifact"
             sigstore sign "$artifact"
           done
+          ls -la dist/*.sigstore.json *.sigstore.json 2>/dev/null || true
+
+      - name: Verify signatures (CI self-check)
+        # TASK_MEE_022 G2-1.5: fail fast if any signature is invalid.
+        run: |
+          set -euo pipefail
+          REPO="Deepsim-AI/multimodal-emotion-engine"
+          NAME="release-sigstore-sign"
+          verify() {
+            local bundle="$1" artifact="$2"
+            echo "== verifying $artifact against $bundle"
+            sigstore verify github \
+              --bundle "$bundle" \
+              --repository "$REPO" \
+              --name "$NAME" \
+              "$artifact"
+          }
+          verify MEE_INTEGRITY_HASHES.txt.sigstore.json MEE_INTEGRITY_HASHES.txt
+          verify MEE_RELEASE_MANIFEST.json.sigstore.json MEE_RELEASE_MANIFEST.json
+          for whl in dist/*.whl; do
+            verify "${whl}.sigstore.json" "$whl"
+          done
+          for sdist in dist/*.tar.gz; do
+            verify "${sdist}.sigstore.json" "$sdist"
+          done
+          echo "All Sigstore verifications PASSED"
 
       - name: Create GitHub Release
         id: create_release
@@ -90,12 +120,16 @@ jobs:
         with:
           tag_name: "${{ github.ref_name }}"
           name: "Release ${{ github.ref_name }}"
+          # TASK_MEE_022 G2-1.5: attach ALL bundles — dist/ bundles were
+          # missing from v0.4.4 because the glob only matched the repo root.
           files: |
             dist/*.whl
             dist/*.tar.gz
+            dist/*.sigstore.json
             MEE_RELEASE_MANIFEST.json
             MEE_INTEGRITY_HASHES.txt
-            *.sigstore.json
+            MEE_RELEASE_MANIFEST.json.sigstore.json
+            MEE_INTEGRITY_HASHES.txt.sigstore.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

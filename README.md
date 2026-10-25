@@ -50,7 +50,7 @@ cd multimodal-emotion-engine
 
 # 2. Install from the signed wheel in the GitHub release (preferred)
 #    Grab the .whl from https://github.com/Deepsim-AI/multimodal-emotion-engine/releases
-pip install multimodal_emotion_engine-0.4.4-py3-none-any.whl
+pip install multimodal_emotion_engine-0.4.5-py3-none-any.whl
 
 #    — or install from source (repo checkout) —
 pip install .
@@ -72,7 +72,7 @@ pip install ".[dev]"
 > **Tip:** to install a specific release, download the matching `.whl` from the
 > [Releases](https://github.com/Deepsim-AI/multimodal-emotion-engine/releases) page and run
 > `pip install <that-file>.whl`. The optional extras above work the same way once the
-> base wheel is installed (e.g. `pip install multimodal_emotion_engine-0.4.4-py3-none-any.whl[vision]`).
+> base wheel is installed (e.g. `pip install multimodal_emotion_engine-0.4.5-py3-none-any.whl[vision]`).
 
 ### Download model weights
 The production weights live in the canonical `models/` tree (not shipped with the
