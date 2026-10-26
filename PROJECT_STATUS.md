@@ -1,6 +1,6 @@
 # MEE Project Status
 
-**Last Updated:** 2026-10-22
+**Last Updated:** 2026-10-26
 **Phase:** Phase 9 (License Hardening & Signed Distribution) → **Complete**
 
 ---
@@ -26,6 +26,9 @@
 | MEE_022 | Hub Distribution — Publish v0.4.5 to Forgejo Hub (`forge.deepsim.ai:8443`) + Sigstore release-pipeline fix | ✅ **G4 APPROVED — CLOSED (v0.4.5)** | 2026-10-25 |
 | MEE_023 | Hub Portal Update — "Available" status for MEE channels | ⬛ **CLOSED as OBE (Obsoleted by completion)** — delivered by MEE_022; all 5 AC verified | 2026-10-26 |
 | MEE_027_C | Historical Release Documentation (v0.4.4 defect + MEE_023 OBE closure) | ✅ **G4 APPROVED — CLOSED** | 2026-10-26 |
+| MEE_024 | Platform Independence Architecture Proposal | ✅ **G1 APPROVED** (architecture proposal only) | 2026-10-26 |
+| MEE_026_B | Forgejo→GitHub one-way mirror mechanism (spec) | ✅ **G4 APPROVED — CLOSED (G5)** | 2026-10-26 |
+| MEE_029 | Cosign key-based release signing deployment (Option B) | 🆕 **G1 approved — impl pending** | 2026-10-26 |
 
 
 ---

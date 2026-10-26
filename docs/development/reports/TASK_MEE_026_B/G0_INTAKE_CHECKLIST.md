@@ -1,10 +1,16 @@
-# G0_INTAKE_CHECKLIST - TASK_MEE_026_B: Mirror Architecture Specification
+# G0_INTAKE_CHECKLIST - TASK_MEE_026_B: One-Way Mirror Mechanism Specification
 
 **Task ID:** TASK_MEE_026_B
 **Gate:** G0 - PM Intake (mechanical sign-off checklist)
-**Date:** 2026-10-25 ~21:51 PDT
+**Date:** 2026-10-25 ~21:51 PDT (intake) · **Scope refocused 2026-10-26**
 **Prepared by:** CTO at gateway-owner explicit authorization per TASK_MEE_024 decision 2
 **Companion to:** TASK_REQ_MIRROR_ARCH.md in /reports/TASK_MEE_026_B_MIRROR/
+
+> **Scope refocus (2026-10-26, gateway-owner).** Original request was a *per-repo* mirror
+> eligibility spec. Owner clarified the mirror is a **one-way mechanism** (Forgejo → GitHub,
+> webhook-driven), not a repo-specific property. There is no mirror repo to specify today, and MEE
+> already lives on GitHub. Scope is now the **mechanism + tiered trigger**, not "which repo mirrors."
+> See TASK_MEE_024 §Decision 2 "Trigger Scope / Tiered Mirroring" for the authoritative boundary.
 
 ## 1. Task ID Verification
 
@@ -17,31 +23,37 @@
 
 | Artifact | Status |
 |----------|--------|
-| TASK_REQ_MIRROR_ARCH.md (task request) | present in /reports/TASK_MEE_026_B_MIRROR/ subfolder |
-| G0_INTAKE_CHECKLIST.md (this file) | written (G0 phase) |
+| TASK_REQ_MIRROR_ARCH.md (original task request) | present in /reports/TASK_MEE_026_B_MIRROR/ (superseded by refocus) |
+| G0_INTAKE_CHECKLIST.md (this file) | written (G0) — refocused |
+| LOCK.md | PENDING (this file) |
 
 ## 3. Parent Task Authorization
 
-Per TASK_MEE_024 decision 2: "APPROVED IN PRINCIPLE" with conditions requiring separate task for implementation.
-- Owner explicitly authorizes architecture specification work only
-- No mirroring enabling, repository permission changes, or publishing authorized under this decision alone
-- Repository eligibility, publication controls, sync behavior, credentials, failure handling, and audit evidence must be specified before implementation
+Per TASK_MEE_024 Decision 2 ("APPROVED IN PRINCIPLE") + owner 2026-10-26 trigger-scope clarification:
+- Owner authorizes **mechanism specification only** — no mirroring enabling, no permission changes.
+- **Mirror direction:** Forgejo canonical → GitHub one-way mirror (webhook `git push --mirror`).
+- **Tiered trigger:** public/open-source repos auto-mirror; private/commercial repos require
+  explicit owner allowlist approval per repo.
+- MEE (`Deepsim-AI/multimodal-emotion-engine`) is public → qualifies for automatic mirror.
+- No implementation, no production service change, no new credentials provisioned under this task.
 
-## 4. Constraints (from owner decision)
+## 4. Constraints
 
-| Constraint | Present in TASK_REQ? |
-|-----------|---------------------|
-| Do NOT enable mirroring | Yes - documented as specification-only task |
-| Do NOT modify repository permissions | Yes - architecture spec only |
-| No publishing during specification phase | Yes - explicit constraint |
-| Private/commercial repos must never be exposed automatically | Yes - exclusion mechanism required in spec |
+| Constraint | Present |
+|------------|---------|
+| Do NOT enable mirroring | Yes — spec only |
+| Do NOT modify repository permissions | Yes — spec only |
+| No publishing during specification | Yes — explicit |
+| Private/commercial repos never auto-mirrored | Yes — owner allowlist gate required |
+| Bot token scope (repo + read:packages only, never admin) | Yes — must be specified |
+| Forgejo Actions lacks native OIDC (v17.0.0+gitea-1.22.0) | Yes — noted for signing (MEE_026 A, separate) |
 
 ## 5. Baseline Verification (G0 read-only)
 
 | Check | Result |
 |-------|--------|
-| Git working tree unmodified for G0 drafting | Only untracked additions in task folders OK |
-| No production services changed | Confirmed read-only assessment only OK |
+| Git working tree unmodified | Only untracked additions in task folders OK |
+| No production services changed | Read-only assessment OK |
 
 ---
-*This is a G0 process artifact. Nothing implemented.*
+*G0 process artifact — nothing implemented. Scope refocus recorded per owner authorization.*

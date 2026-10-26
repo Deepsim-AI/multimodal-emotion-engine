@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## Governance (2026-10-26)
+
+- **MEE_024 platform-independence proposal (G1 approved):** architecture proposal only — no
+  production changes. Mirror direction locked: **Forgejo is canonical source of truth; GitHub is a
+  one-way mirror (Forgejo → GitHub), webhook-driven `git push --mirror`**. Trigger scope is tiered:
+  **public/open-source repos auto-mirror; private/commercial repos require explicit owner allowlist
+  approval** (backup is a valid reason but must be authorized per repo). MEE (`Deepsim-AI/multimodal-emotion-engine`) is public → auto-mirrors. This replaces the per-repo eligibility framing from the original MEE_026 B request.
+- **MEE_026_B** G2 spec authored 2026-10-26: one-way mirror mechanism (Forgejo → GitHub, webhook-driven
+  `git push --mirror`, tiered trigger: public auto-mirror / private allowlist-gated). Spec-only — no
+  implementation. Enabling the mirror is a separate task requiring its own G0 intake and owner
+  authorization.
+- **MEE_026_B CLOSED (G4 approved + G5 2026-10-26):** all 7 ACs verified by Reviewer (G3) and CTO (G4).
+  The mirror **mechanism is fully specified but NOT enabled**. Enabling requires a **separate task** with
+  its own G0 intake and owner authorization. This spec does not authorize enabling any mirror.
+- **MEE_029 Cosign deployment (G1 approved 2026-10-26):** deploy the Cosign key-based signing pattern
+  (Option B, proven in MEE_025_A POC) as an **additive parallel path** to the existing keyless
+  Sigstore (Fulcio) signing in `.github/workflows/release-sigstore.yml`. Chosen because Forgejo Actions
+  (v17.0.0+gitea-1.22.0) lacks native OIDC — a plain CLI cosign call sidesteps that gap. Both paths
+  coexist during migration; customer impact scoped to public-key distribution (no trust-bundle
+  migration). Highest-risk task (production signing) — highest-scrutiny review at G3.
+- **MEE_023** formally closed as OBE (Obsoleted by completion) — all 5 AC verified as delivered by MEE_022.
+
 ## [v0.4.5] — 2026-10-25
 
 ### Added
