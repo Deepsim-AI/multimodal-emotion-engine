@@ -1,0 +1,36 @@
+{
+  "mediaType": "application/vnd.dev.cosign.sigstore+json;v=0.1",
+  "version": "0.1",
+  "verificationMaterial": {
+    "content": {
+      "x509CertificateChain": {
+        "certificates": [
+          {
+            "rawBytes": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFRmF5am1TSFhuUzB2enhjMTFETzhteHZuSzdHaApTczFMaGhHcHZsa01XRnhtTERnaDhaL1k1YnpORnJLUTM0azg5WjFRazIzMTQrVmhaN2srMUJYbEZ3PT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==",
+            "rawBytesBase64": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFRmF5am1TSFhuUzB2enhjMTFETzhteHZuSzdHaApTczFMaGhHcHZsa01XRnhtTERnaDhaL1k1YnpORnJLUTM0azg5WjFRazIzMTQrVmhaN2srMUJYbEZ3PT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=="
+          }
+        ]
+      }
+    }
+  },
+  "dsseEnvelope": {
+    "payloadType": "application/vnd.dev.cosign.artifact.sigstore+json",
+    "payload": "MjNjMjY2ODJiNGYzMDk0YTJhN2M3MGYwODQ0MzlmNjBmYjJmYzgzNGNkMjc2ODA2ZWJmMDJhODhlMjA2MmMyOQ==",
+    "signatures": [
+      {
+        "keyid": "",
+        "sig": "MEQCIA3T3azsHE2iwgIA59YEivZd86LNXIySf/LEiayFiuO2AiB6WDDHkck8PSk0VvrWn3lwmaFwjNMr2rH2MiJNH83rIA=="
+      }
+    ]
+  },
+  "signature": {
+    "messageDigest": {
+      "algorithm": "SHA-256",
+      "digest": "23c26682b4f3094a2a7c70f084439f60fb2fc834cd276806ebf02a88e2062c29"
+    },
+    "signingInput": {
+      "algorithm": "ecdsa-p256",
+      "base64Signature": "MEQCIA3T3azsHE2iwgIA59YEivZd86LNXIySf/LEiayFiuO2AiB6WDDHkck8PSk0VvrWn3lwmaFwjNMr2rH2MiJNH83rIA=="
+    }
+  }
+}

@@ -98,6 +98,37 @@ a Python-only library; packaging as a container/tarball bundle is a future task.
 **Post-G4:** this PM entry updates `PROJECT_STATUS.md` + `CHANGELOG.md`, commits approved work
 locally; remote push pending user confirmation of target repo + branch.
 
+## TASK_MEE_025_A — Signing Proof of Concept (Stage A) ✅ G4 APPROVED — CLOSED (2026-10-26)
+
+**Deliverable:** Balanced, isolated proof-of-concept comparing two release-signing strategies for MEE —
+key-based Cosign (Option B) vs self-hosted Fulcio keyless (Option A) — with a recommendation and a
+key-protection/runbook so the decision can move to deployment planning.
+
+**What was proven (Stage A, isolated to `/tmp/mee-signing-poc/`):**
+- **Option B — Cosign key-based:** ECDSA P-256 signing of a read-only copy of the MEE wheel + SHA-256
+  via `openssl`, verified OK, tamper detection confirmed. Full customer verification path documented.
+- **Option A — Fulcio keyless:** Fulcio server started (ephemeral RSA-4096 CA); Rekor transparency log
+  unavailable in POC (Trillian not installable on arm64); real Forgejo OIDC deferred to Stage B.
+- **Key protection:** rotation (12-month cycle + 5-step process), compromise recovery tiers (0–2h /
+  2–24h / 24–48h), fork-safety analysis for both options.
+- **Operational cost:** Option B ≈ 0 infra / ~0 RAM-disk / very low maintenance; Option A needs
+  Rekor+Trillian+Fulcio+OIDC (~300–500 MB RAM, 1–10 GB disk, moderate–high maintenance).
+- **Security comparison:** 6 strengths + 5 weaknesses per option, threat models, residual risk.
+
+**Outcome:** CTO + Reviewer recommend **Option B (Cosign key-based) for immediate deployment planning**
+(0 infra, no customer trust-bundle migration, works offline). The public key
+(`poc-evidence/cosign-public.pem`) is available for staging verification tests — **not** production until
+a separate deployment task completes G0–G4.
+
+**Deferred (per owner decision, not failures):** real Forgejo OIDC + full Fulcio/Rekor + customer
+migration path → **separate task TASK_MEE_025_B** (authorized, not executed here).
+
+**Isolation:** no commits to production repo; no changes to `mee/`, `tests/`, `pyproject.toml`; no new
+tags/releases/publication; no production credentials used; private keys never left the POC dir.
+
+**Post-G4:** this PM entry updates `PROJECT_STATUS.md` + `CHANGELOG.md`; task closed. Local commit of
+approved work remains pending; remote push still needs user confirmation of target repo + branch.
+
 ## Blockers
 
 None.

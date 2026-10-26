@@ -1,0 +1,27 @@
+2026-10-25T22:11:57.865-0700	[33mWARN[0m	app/serve.go:306	warn loading --config-path=/etc/fulcio-config/config.yaml: stat /etc/fulcio-config/config.yaml: no such file or directory, fall back to json
+github.com/sigstore/fulcio/cmd/app.runServeCmd
+	github.com/sigstore/fulcio@v1.9.1/cmd/app/serve.go:306
+github.com/spf13/cobra.(*Command).execute
+	github.com/spf13/cobra@v1.10.2/command.go:1019
+github.com/spf13/cobra.(*Command).ExecuteC
+	github.com/spf13/cobra@v1.10.2/command.go:1148
+github.com/spf13/cobra.(*Command).Execute
+	github.com/spf13/cobra@v1.10.2/command.go:1071
+github.com/spf13/cobra.(*Command).ExecuteContext
+	github.com/spf13/cobra@v1.10.2/command.go:1064
+github.com/sigstore/fulcio/cmd/app.Execute
+	github.com/sigstore/fulcio@v1.9.1/cmd/app/root.go:37
+main.main
+	github.com/sigstore/fulcio@v1.9.1/main.go:25
+runtime.main
+	runtime/proc.go:302
+2026-10-25T22:11:57.865-0700	[34mINFO[0m	config/config.go:690	No config at /etc/fulcio-config/config.json, using defaults: &{map[https://accounts.google.com:{https://accounts.google.com sigstore email          false} https://oauth2.sigstore.dev/auth:{https://oauth2.sigstore.dev/auth sigstore email  $.federated_claims.connector_id        false} https://token.actions.githubusercontent.com:{https://token.actions.githubusercontent.com sigstore github-workflow          false}] map[] map[] map[] <nil> []}
+2026-10-25T22:11:58.530-0700	[34mINFO[0m	app/grpc.go:242	listening on grpc at [::]:8081
+2026-10-25T22:11:58.531-0700	[34mINFO[0m	app/grpc.go:290	listening on grpc at @fulcio-legacy-grpc-socket
+2026-10-25T22:11:58.531-0700	[34mINFO[0m	app/http.go:138	listening on http at 127.0.0.1:5555
+2026-10-25T22:34:39.973-0700	[34mINFO[0m	app/serve.go:473	stopped prom server
+2026-10-25T22:34:39.973-0700	[34mINFO[0m	app/http.go:152	stopped http server
+2026-10-25T22:34:39.973-0700	[34mINFO[0m	app/http.go:170	http server shutdown
+2026-10-25T22:34:39.973-0700	[34mINFO[0m	app/grpc.go:253	stopped grpc server
+2026-10-25T22:34:39.973-0700	[34mINFO[0m	app/grpc.go:266	grpc server shutdown
+2026-10-25T22:34:39.973-0700	[34mINFO[0m	app/serve.go:479	prom server shutdown

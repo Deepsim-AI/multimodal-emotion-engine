@@ -1,0 +1,74 @@
+2026-10-25T22:10:49.322-0700	[34mINFO[0m	app/serve.go:87	starting rekor-server @ {
+  "gitVersion": "v1.5.5",
+  "gitCommit": "206912e3cf61ba3fed587896e10d4812411e6913",
+  "gitTreeState": "clean",
+  "buildDate": "2026-10-20T22:29:16Z",
+  "goVersion": "go1.27.3",
+  "compiler": "gc",
+  "platform": "linux/arm64"
+}
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'cose'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'cose'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'rfc3161'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'rfc3161'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'rekord'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'rekord'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'rpm'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'rpm'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'intoto'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1 0.0.2]' for entry type 'intoto'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'jar'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'jar'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'tuf'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'tuf'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'alpine'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'alpine'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'hashedrekord'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'hashedrekord'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'helm'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'helm'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:139	Loading support for entry type 'dsse'
+2026-10-25T22:10:49.344-0700	[34mINFO[0m	app/serve.go:140	Loading version '[0.0.1]' for entry type 'dsse'
+2026-10-25T22:10:49.345-0700	[34mINFO[0m	api/api.go:94	No tree ID specified, attempting to create a new tree
+2026-10-25T22:10:49.347-0700	[31mPANIC[0m	api/api.go:207	create and init tree: create tree: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:8090: connect: connection refused"
+github.com/sigstore/rekor/pkg/api.ConfigureAPI
+	github.com/sigstore/rekor@v1.5.5/pkg/api/api.go:207
+github.com/sigstore/rekor/cmd/rekor-server/app.init.func1
+	github.com/sigstore/rekor@v1.5.5/cmd/rekor-server/app/serve.go:177
+github.com/spf13/cobra.(*Command).execute
+	github.com/spf13/cobra@v1.10.2/command.go:1019
+github.com/spf13/cobra.(*Command).ExecuteC
+	github.com/spf13/cobra@v1.10.2/command.go:1148
+github.com/spf13/cobra.(*Command).Execute
+	github.com/spf13/cobra@v1.10.2/command.go:1071
+github.com/sigstore/rekor/cmd/rekor-server/app.Execute
+	github.com/sigstore/rekor@v1.5.5/cmd/rekor-server/app/root.go:75
+main.main
+	github.com/sigstore/rekor@v1.5.5/cmd/rekor-server/main.go:21
+runtime.main
+	runtime/proc.go:302
+panic: create and init tree: create tree: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:8090: connect: connection refused"
+
+goroutine 1 [running]:
+go.uber.org/zap/zapcore.CheckWriteAction.OnWrite(0x0?, 0x0?, {0x0?, 0x0?, 0x0?})
+	go.uber.org/zap@v1.28.0/zapcore/entry.go:196 +0x74
+go.uber.org/zap/zapcore.(*CheckedEntry).Write(0x716a10c28c40, {0x0?, 0x716a110600c0?, 0xb7?})
+	go.uber.org/zap@v1.28.0/zapcore/entry.go:290 +0x2bc
+go.uber.org/zap.(*SugaredLogger).log(0x716a10d0c0e8, 0x4, {0x0?, 0x3bacdc?}, {0x716a112c78f8?, 0x716a10c29b20?, 0x716a112c78d8?}, {0x0, 0x0, 0x0})
+	go.uber.org/zap@v1.28.0/sugar.go:355 +0xe0
+go.uber.org/zap.(*SugaredLogger).Panic(0x0?, {0x716a112c78f8?, 0x38b3c58?, 0x716a114a67e0?})
+	go.uber.org/zap@v1.28.0/sugar.go:180 +0x44
+github.com/sigstore/rekor/pkg/api.ConfigureAPI(0x1a5134c?)
+	github.com/sigstore/rekor@v1.5.5/pkg/api/api.go:207 +0x6c
+github.com/sigstore/rekor/cmd/rekor-server/app.init.func1(0x716a1118ac00?, {0x1a5141c?, 0x4?, 0x1a51420?})
+	github.com/sigstore/rekor@v1.5.5/cmd/rekor-server/app/serve.go:177 +0xd54
+github.com/spf13/cobra.(*Command).execute(0x3e09e30, {0x716a11054480, 0x3, 0x3})
+	github.com/spf13/cobra@v1.10.2/command.go:1019 +0x810
+github.com/spf13/cobra.(*Command).ExecuteC(0x3e09b58)
+	github.com/spf13/cobra@v1.10.2/command.go:1148 +0x340
+github.com/spf13/cobra.(*Command).Execute(...)
+	github.com/spf13/cobra@v1.10.2/command.go:1071
+github.com/sigstore/rekor/cmd/rekor-server/app.Execute()
+	github.com/sigstore/rekor@v1.5.5/cmd/rekor-server/app/root.go:75 +0x24
+main.main()
+	github.com/sigstore/rekor@v1.5.5/cmd/rekor-server/main.go:21 +0x1c

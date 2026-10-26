@@ -54,6 +54,32 @@ All notable changes to this project will be documented in this file.
 - Version bump: 0.3.0 → 0.4.0 (minor — new integrity + signed-distribution capability).
 - **Phase 9 (License Hardening & Signed Distribution) now COMPLETE.**
 
+---
+
+### Added
+
+**MEE_025_A — Signing Proof of Concept (Stage A) — G0–G4 complete, CLOSED (2026-10-26):**
+- Balanced, isolated proof-of-concept comparing two MEE release-signing strategies: key-based **Cosign
+  (Option B)** vs self-hosted **Fulcio keyless (Option A)**.
+- **Option B (Cosign, recommended):** ECDSA P-256 signing of a read-only copy of the MEE wheel + SHA-256
+  (`openssl dgst -sha256 -sign`), verified OK, tamper detection confirmed (modified artifact fails
+  verification). Full customer verification path documented (public key + sig + artifact → verify).
+- **Option A (Fulcio):** Fulcio server started (ephemeral RSA-4096 CA); Rekor transparency log unavailable
+  in POC (Trillian not installable on arm64); real Forgejo OIDC deferred to **Stage B** per owner decision.
+- **Recommendation (CTO + Reviewer):** adopt **Option B (Cosign key-based) for immediate deployment
+  planning** — zero infrastructure, no customer trust-bundle migration, works offline; MEDIUM residual
+  risk (long-lived key) mitigated by the documented rotation/recovery procedures.
+- **Key protection runbook** (`KEY_PROTECTION.md`): 12-month rotation (5-step), compromise recovery tiers
+  (0–2h / 2–24h / 24–48h), fork-safety analysis; public key distributed via CHANGELOG/release notes only.
+- **Operational cost:** Option B ≈ 0 infra / ~0 RAM-disk / very low maintenance; Option A needs Rekor+
+  Trillian+Fulcio+OIDC (~300–500 MB RAM, 1–10 GB disk, moderate–high maintenance).
+- **Security comparison:** 6 strengths + 5 weaknesses per option, threat models, residual risk.
+- **Deferred (not failures):** Stage B (real Forgejo OIDC + full Fulcio/Rekor + customer migration path)
+  authorized as a **separate task (TASK_MEE_025_B)** — not executed here.
+- **Isolation:** no commits to production repo; no changes to `mee/`, `tests/`, `pyproject.toml`; no new
+  tags/releases/publication; private keys never left the POC dir.
+- This is a decision/POC task — no version bump, no production code shipped.
+
 ## [v0.3.0] — 2026-10-22
 
 ### Added
