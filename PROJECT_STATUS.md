@@ -23,6 +23,7 @@
 | MEE_015 | License Integration (Gate C) | ✅ **G4 APPROVED — CLOSED (v0.2.0)** | 2026-10-21 |
 | MEE_019 | License Plan Selection & Purchase UI | ✅ **G4 APPROVED — CLOSED (v0.3.0)** | 2026-10-22 |
 | MEE_020 | License Hardening & Signed Distribution | ✅ **G4 APPROVED — CLOSED (v0.4.0)** | 2026-10-22 |
+| MEE_022 | Hub Distribution — Publish v0.4.5 to Forgejo Hub (`forge.deepsim.ai:8443`) + Sigstore release-pipeline fix | ✅ **G4 APPROVED — CLOSED (v0.4.5)** | 2026-10-25 |
 
 
 ---
@@ -66,6 +67,36 @@ self-check and added verifiable Sigstore signed distribution.
 **Next in sequence (after MEE_019 closes):**
 - No open MEE tasks currently. Gate B (Keygate license enforcement) is deployed; remaining work is
   the separate `RELEASE_KEY_ENCRYPTION_KEY` server-side remediation.
+
+---
+
+## TASK_MEE_022 — Hub Distribution (v0.4.5) ✅ G4 APPROVED — CLOSED (2026-10-25)
+
+**Deliverable:** MEE v0.4.5 published to the Hub PyPI registry (`forge.deepsim.ai:8443`) with
+Sigstore provenance, and the release-pipeline Sigstore bug fixed so wheel/sdist bundles are
+actually attached to the GitHub release.
+
+**Verified live (independently re-run from this host):**
+- `pip download --index-url https://forge.deepsim.ai:8443/api/packages/deepsim/pypi/simple/`
+  → wheel **109,384 bytes**, SHA-256 `d6d9e0b9ba3f…660cd8b` (matches the GitHub v0.4.5 signed asset).
+- `sigstore verify github` on the Hub-downloaded wheel + all 4 release bundles → **OK**
+  (Fulcio keyless via GitHub Actions, `repository=Deepsim-AI/multimodal-emotion-engine`,
+  `workflow=release-sigstore-sign`). Only output is the benign "untrusted root key: unsupported
+  key type: 7" warning; verification itself succeeds.
+- Portal shows MEE **Available** with v0.4.5 install commands (`hub.deepsim.ai:8443`).
+- Test packages untouched (C3 honored).
+
+**What fixed this (from G3's earlier live check of `hub.deepsim.ai`, which returned 0 versions):**
+the publish target is `forge.deepsim.ai:8443`, not `hub.deepsim.ai:8443` — routing gap, not a
+missing publish. Root-cause CI fix: duplicate `release.yml` removed; `release-sigstore.yml` now
+attaches `dist/*.sigstore.json` so the v0.4.5 release has **8 assets** (v0.4.4 had 6) and
+`verify_release.sh` reports `signature: PASS`. (See `TASK_COMPLETION_AUDIT.md`, `CTO_APPROVAL.md`.)
+
+**Deferred by owner (not failures):** OCI image (AC#5/6/12) and Generic channel (AC#7) — MEE is
+a Python-only library; packaging as a container/tarball bundle is a future task.
+
+**Post-G4:** this PM entry updates `PROJECT_STATUS.md` + `CHANGELOG.md`, commits approved work
+locally; remote push pending user confirmation of target repo + branch.
 
 ## Blockers
 

@@ -2,7 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.4.0] — 2026-10-22
+## [v0.4.5] — 2026-10-25
+
+### Added
+
+**MEE_022 — Hub Distribution & Sigstore Release-Pipeline Fix — v0.4.5 (G0–G5 complete, CLOSED):**
+- **Hub PyPI publish** of MEE v0.4.5 to the Forgejo Hub registry at `forge.deepsim.ai:8443`
+  (org `deepsim`); verified live via `pip download` → wheel **109,384 bytes**, SHA-256
+  `d6d9e0b9ba3f2707bff98a133355eb84d432b85f29fc691a85bd6d0dc660cd8b`, which matches the
+  GitHub v0.4.5 signed asset. `sigstore verify github` on the Hub-downloaded wheel + all four
+  release bundles → **OK** (Fulcio keyless via GitHub Actions). Portal shows MEE **Available**
+  with v0.4.5 install commands.
+- **Release-pipeline Sigstore fix** (root cause of invalid/no wheel signatures): removed the
+  stale duplicate `.github/workflows/release.yml` (it signed *before* anchor-embed, producing
+  invalid wheel/sdist sigs while `release-sigstore.yml` signed *after* → both clobbered the
+  same release). Only `release-sigstore.yml` now runs.
+- **Sigstore bundle attachment:** `release-sigstore.yml` now uploads `dist/*.sigstore.json`,
+  so the v0.4.5 release carries **8 assets** (v0.4.4 had 6); the wheel and sdist now ship
+  attached `.sigstore.json` bundles, so customer `tools/verify_release.sh` reports
+  `signature: PASS` (previously `SKIPPED` for the wheel).
+- **`verify_release.sh` correction:** fixed `--repository`/`--name` params
+  (`Deepsim-AI/multimodal-emotion-engine` / `release-sigstore-sign`) and dropped the stale
+  `--certificate` flag (not valid in the sigstore 3.x bundle format).
+- **Version bump:** 0.4.4 → 0.4.5 (clean re-release, no tag reuse).
+- Out of scope (tracked): OCI image (AC#5/6/12) and Generic channel tarball (AC#7) deferred —
+  MEE is a Python-only library; container/tarball packaging is a future task.
+
+### Changed
+
+- `.github/workflows/release.yml` — **deleted** (duplicate signer removed).
+- `.github/workflows/release-sigstore.yml` — attach `dist/*.sigstore.json`; single signer.
+- `tools/verify_release.sh` — corrected repo/name params, remove stale `--certificate` flag.
+- `pyproject.toml` version: `0.4.4 → 0.4.5`.
+- `README.md` — install examples updated to v0.4.5 wheels.
+
+---
 
 ### Added
 
