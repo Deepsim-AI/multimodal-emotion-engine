@@ -49,3 +49,4 @@ stability/stability_results.json
 
 # MEE remote-demo runtime PID files (mee-remotedemo-start.sh) — per-host, not source
 .run/
+.pypirc-hub

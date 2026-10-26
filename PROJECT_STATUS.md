@@ -24,6 +24,8 @@
 | MEE_019 | License Plan Selection & Purchase UI | ✅ **G4 APPROVED — CLOSED (v0.3.0)** | 2026-10-22 |
 | MEE_020 | License Hardening & Signed Distribution | ✅ **G4 APPROVED — CLOSED (v0.4.0)** | 2026-10-22 |
 | MEE_022 | Hub Distribution — Publish v0.4.5 to Forgejo Hub (`forge.deepsim.ai:8443`) + Sigstore release-pipeline fix | ✅ **G4 APPROVED — CLOSED (v0.4.5)** | 2026-10-25 |
+| MEE_023 | Hub Portal Update — "Available" status for MEE channels | ⬛ **CLOSED as OBE (Obsoleted by completion)** — delivered by MEE_022; all 5 AC verified | 2026-10-26 |
+| MEE_027_C | Historical Release Documentation (v0.4.4 defect + MEE_023 OBE closure) | ✅ **G4 APPROVED — CLOSED** | 2026-10-26 |
 
 
 ---
@@ -127,6 +129,27 @@ migration path → **separate task TASK_MEE_025_B** (authorized, not executed he
 tags/releases/publication; no production credentials used; private keys never left the POC dir.
 
 **Post-G4:** this PM entry updates `PROJECT_STATUS.md` + `CHANGELOG.md`; task closed. Local commit of
+approved work remains pending; remote push still needs user confirmation of target repo + branch.
+
+## TASK_MEE_027_C — Historical Release Documentation + TASK_MEE_023 OBE Closure ✅ G4 APPROVED — CLOSED (2026-10-26)
+
+**Deliverable:** Transparent documentation of the MEE v0.4.4 signing-bundle defect (no artifact
+modification, no tag movement) + closure of TASK_MEE_023 (Hub Portal Update) as **OBE (Obsoleted by
+completion)** with all 5 original acceptance criteria verified against TASK_MEE_022 evidence.
+
+**What was documented:**
+- v0.4.4 shipped only **6 assets** — wheel/sdist lacked attached `.sigstore.json` bundles — because the
+duplicate `.github/workflows/release.yml` signed *before* anchor-embed, clobbering good bundles.
+- Resolution: fixed in **v0.4.5** (8 assets; `verify_release.sh` reports `signature: PASS` — was
+`SKIPPED` at v0.4.4). Entry added to `CHANGELOG.md`; v0.4.5 confirmed as current release baseline
+(SHA-256 `d6d9e0b9…660cd8b`, sigstore verify PASS, Forgejo Hub `forge.deepsim.ai:8443` Available).
+
+**TASK_MEE_023 closure (OBE):** its single deliverable — portal "Available" status for all MEE channels —
+was fulfilled by TASK_MEE_022's completed v0.4.5 Hub distribution. All 5 original AC verified against
+MEE_022 CTO_APPROVAL / G5 evidence + live portal check (2026-10-26). No implementation or release activity
+attributable to MEE_023 itself.
+
+**Post-G4:** this PM entry updates `PROJECT_STATUS.md`; CHANGELOG.md entry present (G2). Local commit of
 approved work remains pending; remote push still needs user confirmation of target repo + branch.
 
 ## Blockers

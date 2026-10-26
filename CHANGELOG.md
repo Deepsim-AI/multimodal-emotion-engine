@@ -80,6 +80,17 @@ All notable changes to this project will be documented in this file.
   tags/releases/publication; private keys never left the POC dir.
 - This is a decision/POC task — no version bump, no production code shipped.
 
+---
+
+### Added
+
+**MEE_027_C — Historical Release Documentation (v0.4.4 defect + MEE_023 OBE closure) — G0–G5 complete, CLOSED (2026-10-26):**
+- **v0.4.4 signing-bundle defect documented transparently** in this file (no historical artifact modification, no tag movement). The v0.4.4 GitHub release shipped only **6 assets** — the wheel and sdist lacked attached `.sigstore.json` bundles — because a duplicate `.github/workflows/release.yml` both named `release-sigstore-sign` signed *before* the integrity-anchor embed, clobbering good bundles. `release-sigstore.yml` was the sole correct signer; only it runs now.
+- **Resolution recorded:** fixed in **v0.4.5** — duplicate `release.yml` removed, `release-sigstore.yml` now attaches `dist/*.sigstore.json`, so v0.4.5 carries **8 assets** and customer `tools/verify_release.sh` reports `signature: PASS` (was `SKIPPED` for the wheel at v0.4.4).
+- **v0.4.5 confirmed as current release baseline:** v0.4.5 wheel 109,384 bytes SHA-256 `d6d9e0b9…660cd8b` (matches signed GitHub asset), `sigstore verify github` PASS on wheel + all 4 bundles; Forgejo Hub (`forge.deepsim.ai:8443`) shows MEE **Available** with v0.4.5 install commands; no test packages touched.
+- **TASK_MEE_023 (Hub Portal Update) closed as OBE (Obsoleted by completion):** its single deliverable — portal “Available” status for all MEE distribution channels — was fulfilled by TASK_MEE_022’s completed v0.4.5 Hub distribution. All 5 original MEE_023 acceptance criteria verified against MEE_022 evidence + live portal check (‘Available’ badges deployed; ‘Coming Soon’ remains only for non-MEE channels). Full evidence table in `docs/development/reports/TASK_MEE_027_C/MEE_023_CLOSURE.md`.
+- No version bump. Historical artifacts preserved unchanged.
+
 ## [v0.3.0] — 2026-10-22
 
 ### Added
