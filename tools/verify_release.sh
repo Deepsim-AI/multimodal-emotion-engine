@@ -112,10 +112,9 @@ elif [[ -f "$SIGDIR" ]]; then
   # --ref: the git tag/branch that triggered the workflow (v0.4.4, etc.)
   # If --ref is omitted, sigstore checks repo + trigger event only.
   if sigstore verify github \
-      --certificate "${SIGDIR%.json}.crt" 2>/dev/null \
       --bundle "$SIGDIR" \
-      --repository Deepsim-AI \
-      --name multimodal-emotion-engine \
+      --repository Deepsim-AI/multimodal-emotion-engine \
+      --name release-sigstore-sign \
       "$WHEEL"; then
     SIG_RESULT="PASS (sigstore GitHub provenance verified)"
   else
