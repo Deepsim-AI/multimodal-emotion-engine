@@ -198,21 +198,14 @@ jobs:
           AUTH="Authorization: Bearer $TOKEN"
 
           # Create release (ignore 422 if it already exists)
-          RELEASE_RESP=$(curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+          RELEASE_ID=$(curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
             -d "{\"tag_name\": \"$RELEASE_TAG\", \"name\": \"Release $RELEASE_TAG\", \"body\": \"Signed release for $RELEASE_TAG\"}" \
-            "$API/repos/$REPO/releases" 2>/dev/null || echo "{}")
-          RELEASE_ID=$(echo "$RELEASE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+            "$API/repos/$REPO/releases" 2>/dev/null | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || echo "")
           if [ -z "$RELEASE_ID" ]; then
-            # Release may already exist — get its ID
-            RELEASE_ID=$(curl -sf -H "$AUTH" "$API/repos/$REPO/releases" 2>/dev/null | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-for r in d:
-    if r.get('tag_name')=='$RELEASE_TAG':
-        print(r['id']); break
-" 2>/dev/null || echo "")
+            RELEASE_ID=$(curl -sf -H "$AUTH" "$API/repos/$REPO/releases" 2>/dev/null | grep -o '\"tag_name\":\"'$RELEASE_TAG'"[^}]*' | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*' || echo "")
           fi
           echo "Release ID: $RELEASE_ID"
+          [ -n "$RELEASE_ID" ] || { echo "ERROR: could not determine release ID"; exit 1; }
 
           # Upload each asset
           upload_asset() {
