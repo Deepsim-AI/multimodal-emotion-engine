@@ -23,10 +23,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install build tooling
         run: |
@@ -125,6 +125,8 @@ jobs:
       # in CI and signs correctly. Remove after the tag-push test passes.
       - name: COSIGN_PROBE (temporary, remove after test)
         if: always()
+        env:
+          COSIGN_PRIVATE_KEY: "${{ secrets.COSIGN_PRIVATE_KEY }}"
         run: |
           set +e
           echo "=== COSIGN_PROBE ==="
