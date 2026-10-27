@@ -21,7 +21,7 @@ jobs:
 
       - name: Cosign sign + verify (PROBE)
         env:
-          COSIGN_PRIVATE_KEY: *** secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PRIVATE_KEY: "${{ secrets.COSIGN_PRIVATE_KEY }}"
         run: |
           set -euo pipefail
           echo "=== COSIGN_PROBE start ==="
