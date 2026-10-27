@@ -1,132 +1,110 @@
-# TASK_REQ — Rename Deepsim-AI Org to Deepsim
+# TASK_REQ — Forgejo Organization Setup
 
 **Requester:** shouke.wei (gateway-owner)
 **Date:** 2026-10-27
 **Status:** PROPOSED
-**Priority:** Medium (blocking for clean GitHub org URL)
+**Priority:** Medium
 
 ---
 
 ## Problem
 
-The current GitHub organization is named `Deepsim-AI`. The desired name is `Deepsim` (without the `-AI` suffix). However, the username `deepsim` is already taken by an old personal account (created 2016-08-10, 2 repos, no followers).
+Forgejo currently has **no organization** — all repos live under the `deepsim` user namespace (user ID 1, the first user created at instance setup). The goal is to create a `Deepsim` organization on Forgejo for clean project URLs (`Deepsim/multimodal-emotion-engine` instead of `deepsim/multimodal-emotion-engine`).
 
-## Current State
+**Blocker:** Forgejo enforces a global unique namespace (users + orgs). The user `deepsim` (ID 1) exists, so creating an org named `Deepsim` fails with:
+```
+422: user already exists [name: Deepsim]
+```
 
-| Account | Type | Created | Repos | Status |
-|---------|------|---------|-------|--------|
-| `Deepsim-AI` | Organization | 2024-07-08 | 3 (DS-EO, .github, multimodal-emotion-engine) | **Active** |
-| `deepsim` | User | 2016-08-10 | 2 (repoTest3, skills-introduction-to-github) | **Dormant** (no followers, no activity) |
-| `deepsim-ai-bot` | User (bot) | 2026-xx | 0 | **Active** (mirror sync, CI) |
+**GitHub is NOT affected** — `Deepsim-AI` org stays as-is.
+
+## Current Forgejo State
+
+| Item | Value |
+|------|-------|
+| Forgejo version | 17.0.0 (gitea-1.22.0) |
+| Host | `forge.deepsim.ai:8443` |
+| User `deepsim` | ID 1, admin=False, first user |
+| Organizations | **None** |
+| Repos | `deepsim/ci-test`, `deepsim/multimodal-emotion-engine`, `deepsim/runner-test` |
 
 ## Options
 
-### Option A: Rename the `deepsim` user, then rename the org
+### Option A: Rename `deepsim` user → create `Deepsim` org → transfer repos
 
-1. **Rename user `deepsim` → `deepsim-old`** (or any available name)
-   - Go to https://github.com/deepsim/settings
-   - Change username to `deepsim-old` (or `deepsim-2016`, etc.)
-   - This frees the `deepsim` name
-   - ⚠️ This requires access to the `deepsim` account credentials
+1. **Rename user** `deepsim` → `deepsim-admin` (or any available name)
+   - Forgejo web UI: User Settings → Account → Username
+   - Or API: `PATCH /user` with `{"username": "deepsim-admin"}`
+   - ⚠️ This changes ALL existing repo URLs from `deepsim/*` to `deepsim-admin/*`
+   - ⚠️ Git remotes pointing to `deepsim/*` will break until updated
 
-2. **Create org `Deepsim`**
-   - Go to https://github.com/orgs/plan
-   - Create new org named `Deepsim`
+2. **Create org** `Deepsim`
+   - Forgejo web UI or API: `POST /orgs` with `{"username": "Deepsim"}`
 
-3. **Migrate repos from `Deepsim-AI` → `Deepsim`**
-   - Transfer `DS-EO`, `.github`, `multimodal-emotion-engine`
-   - GitHub handles redirects automatically (old URLs continue to work)
-   - Update CI configs, mirror allowlist, and any hardcoded URLs
+3. **Transfer repos** from `deepsim-admin/*` → `Deepsim/*`
+   - Forgejo supports repo transfer via web UI (Repo Settings → Transfer)
+   - Or API: `POST /repos/{owner}/{repo}` with transfer params
+   - GitHub-style redirects: Forgejo creates 301 redirects for transferred repos
 
-4. **Delete or archive `Deepsim-AI`**
+4. **Update all references:**
+   - [ ] Git remotes on all developer machines
+   - [ ] Mirror allowlist: `/opt/mirror/allowlist.yaml` — `repo:` field
+   - [ ] CI configs referencing `deepsim/multimodal-emotion-engine`
+   - [ ] `RELEASED.md` and task docs
 
-**Pros:** Clean, end state is `Deepsim/<repo>`
-**Cons:** Requires access to the old `deepsim` account. Multi-step. Downtime risk during migration.
+**Pros:** Clean end state: `Deepsim/<repo>`
+**Cons:** Multi-step. Repo URL changes break existing clones/remotes. User rename is visible to all users.
 
-### Option B: Keep `Deepsim-AI`, rename to `Deepsim` in-place
+### Option B: Create org with a non-conflicting name
 
-GitHub **does allow renaming an organization** (one-time, free):
-1. Go to https://github.com/organizations/Deepsim-AI/settings
-2. Change the organization name from `Deepsim-AI` to `Deepsim`
-3. GitHub creates automatic redirects from `Deepsim-AI` → `Deepsim`
+Pick an org name that doesn't collide with the `deepsim` user:
 
-**BUT:** This will fail if the `deepsim` username is still taken. GitHub enforces a global unique namespace for users + orgs.
+| Candidate | Conflicts? | Notes |
+|-----------|-----------|-------|
+| `Deepsim-AI` | ❌ No | Matches GitHub org name. Consistent branding. |
+| `DeepsimAI` | ❌ No | No hyphen. |
+| `Deepsim-Labs` | ❌ No | Lab-style branding. |
+| `Deepsim-Org` | ❌ No | Generic. |
+| `Deepsim-AI-Org` | ❌ No | Explicit. |
 
-**If the `deepsim` user is abandoned:**
-1. Contact GitHub Support (https://github.com/contact) and request they release the `deepsim` username (it appears dormant since 2016)
-2. OR: If you have access to the `deepsim` account, rename it first, then rename the org
+Steps:
+1. Create org (e.g., `Deepsim-AI`)
+2. Transfer repos from `deepsim/*` → `Deepsim-AI/*`
+3. Update references (same checklist as Option A)
 
-**Pros:** Single-step rename. GitHub handles redirects automatically.
-**Cons:** Depends on freeing the `deepsim` name.
+**Pros:** No user rename needed. Simpler.
+**Cons:** Name may not match desired branding. Still requires repo transfer.
 
-### Option C: Keep `Deepsim-AI` as-is
+### Option C: Keep current setup (`deepsim` user namespace)
 
-Accept the current name. The `-AI` suffix is actually descriptive and not misleading.
+Accept that repos live under `deepsim/<repo>`. The `deepsim` name is actually the brand name — `deepsim/multimodal-emotion-engine` reads naturally.
 
-**Pros:** Zero effort. No migration risk.
-**Cons:** URL is `Deepsim-AI/<repo>` instead of `Deepsim/<repo>`.
-
-### Option D: Create a new org `Deepsim-LLM` or another available name
-
-Pick a different name that's available. E.g., `Deepsim-LLM`, `DeepsimAI`, `Deepsim-Labs`.
-
-**Pros:** No migration of the old `deepsim` user needed.
-**Cons:** Another migration. Name may not match desired branding.
+**Pros:** Zero effort. No URL changes. No redirects needed.
+**Cons:** No org-level features (org settings, team management, org-level access control).
 
 ---
 
 ## Recommendation
 
-**Option B** (rename in-place) is the cleanest path, **if** you can free the `deepsim` username.
+**Option B with `Deepsim-AI`** — matches the GitHub org name, no conflicts, clean transfer.
 
-### Steps (if choosing Option B):
-
-1. **Free the `deepsim` username:**
-   - If you have the password: log in → Settings → Account → Change username → `deepsim-old`
-   - If you don't have access: email GitHub Support at https://github.com/contact
-     - Subject: "Request to release dormant username: deepsim"
-     - Explain: Account created 2016, no activity, no followers, blocking org rename
-
-2. **Rename the org:**
-   - Go to https://github.com/organizations/Deepsim-AI/settings
-   - Organization name → `Deepsim`
-   - Confirm (irreversible, but redirects are permanent)
-
-3. **Update infrastructure (automated, ~15 min):**
-   - [ ] Update mirror allowlist: `/opt/mirror/allowlist.yaml` — destination URL
-   - [ ] Update CI workflow: `release-sigstore.yml` — any hardcoded org references
-   - [ ] Update `RELEASED.md` — GitHub mirror URL
-   - [ ] Update `G2_COMPLETION_EVIDENCE.md` (MEE_029 + MEE_030) — repo URLs
-   - [ ] Update Forgejo webhook (if configured)
-   - [ ] Update any other config files referencing `Deepsim-AI`
-
-4. **Verify:**
-   - [ ] `git clone https://github.com/Deepsim/multimodal-emotion-engine.git` works
-   - [ ] `git clone https://github.com/Deepsim-AI/multimodal-emotion-engine.git` still works (redirect)
-   - [ ] CI pipeline runs green
-   - [ ] Mirror sync works
-
----
+If the goal is specifically the name `Deepsim` (without suffix), then **Option A** is required, accepting the repo URL change.
 
 ## What I Can Do (Implementation)
 
-Once you decide on an option and free the username (if needed), I can:
-- Update all config files (allowlist, CI workflows, docs)
-- Update the mirror sync script
-- Run a test sync to verify
+Once you pick an option, I can:
+- Create the org via API
+- Transfer repos via API (or guide through web UI)
+- Update mirror allowlist, CI configs, docs
+- Run a test mirror sync to verify
 - Update all task evidence documents
-- Commit and push to both Forgejo and GitHub
 
 **I cannot do:**
-- Rename the `deepsim` user (requires their credentials)
-- Rename the org (requires org owner access in GitHub settings — the bot token may not have this permission)
-- Contact GitHub Support (requires your email)
-
----
+- Rename the `deepsim` user without your confirmation (it's user ID 1, the primary account)
+- Make the decision for you (branding call)
 
 ## Open Questions
 
-1. Do you have access to the `deepsim` GitHub account (password / 2FA)?
-2. Is the `deepsim` account yours or someone else's?
-3. Do you want to proceed with Option B (rename), or prefer Option C (keep `Deepsim-AI`)?
-4. If renaming: any preference for the old user's new name (`deepsim-old`? `deepsim-2016`? something else)?
+1. What org name do you want? (`Deepsim`? `Deepsim-AI`? other?)
+2. If `Deepsim`: are you OK renaming the `deepsim` user to `deepsim-admin` (or another name)?
+3. Should I proceed with repo transfer, or do you want to handle it manually?
