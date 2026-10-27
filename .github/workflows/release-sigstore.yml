@@ -193,8 +193,8 @@ jobs:
           # FORGEJO_TOKEN is auto-provided by the Forgejo runner.
           TOKEN="${FORGEJO_TOKEN:-${{ secrets.FORGEJO_TOKEN }}}"
           [ -n "$TOKEN" ] || { echo "ERROR: FORGEJO_TOKEN not available"; exit 1; }
-          API="${{ server.url }}api/v1"
-          REPO="${{ github.repository }}"
+          API="https://forge.deepsim.ai:8443/api/v1"
+          REPO="deepsim/multimodal-emotion-engine"
           AUTH="Authorization: Bearer $TOKEN"
 
           # Create release (ignore 422 if it already exists)
