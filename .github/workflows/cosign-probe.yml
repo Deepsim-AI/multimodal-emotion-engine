@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           echo "=== COSIGN_PROBE start ==="
           if [ -n "${COSIGN_PRIVATE_KEY:-}" ]; then
-            echo "SECRET_PRESENT=YES (length ${#COSIGN_PRIVATE_KEY})"
+            echo "SECRET_PRESENT=YES (length: $(echo -n \"$COSIGN_PRIVATE_KEY\" | wc -c))"
           else
             echo "SECRET_PRESENT=NO"
             exit 1
