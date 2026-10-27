@@ -30,11 +30,23 @@ proportionate to:
 - One-way direction violation (GitHub→Forgejo must be impossible).
 - Token scope (repo + read:packages, never admin).
 
-## Owner Decisions Needed (for G2/G4)
+## Owner Decisions (RESOLVED 2026-10-27)
 
-1. **Trigger granularity:** full mirror (branches + tags) vs release-only (tags).
-2. **Allowlist policy:** how private/commercial repos are added to the allowlist (owner per-repo decision).
-3. **Alerting channel:** where mirror failures alert.
+All three decisions resolved. See `OWNER_DECISIONS.md` for full detail:
+
+1. **Trigger granularity:** Branches + tags (not `--mirror`). Destructive-change detection required.
+2. **Allowlist policy:** Default deny. Explicit allowlist outside repo code. Required fields: repo, destination, visibility, license, approved_by, approved_on, review_due.
+3. **Alerting:** Fail-closed, immediate alert on failure.
+
+## MEE_029 Prerequisite Status
+
+| Requirement | Status |
+|-------------|--------|
+| MEE_029 CI pipeline green (build→sign→verify→release) | ✅ **Task 38 (2026-10-27): Job succeeded** — 5× Verified OK, 9 assets on release v0.4.5 |
+| Release assets not overwritten | ✅ No existing GitHub release to conflict with |
+| Cosign probe cleanup | ✅ cosign-probe.yml removed, 7 probe tags deleted |
+
+**MEE_030 G2 is unblocked.** Proceed with mirror implementation per owner decisions.
 
 ---
 *End of gate status.*
