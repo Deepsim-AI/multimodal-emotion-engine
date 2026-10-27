@@ -30,6 +30,7 @@ jobs:
 
       - name: Install build tooling
         run: |
+          python3 -m ensurepip --upgrade
           python3 -m pip install --upgrade pip
           python3 -m pip install "build>=1.0,<2.0"
           python3 -m pip install "sigstore>=3.6,<4"  # 3.x (2.x broken with cryptography>=47)
