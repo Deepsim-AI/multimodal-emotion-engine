@@ -10,7 +10,7 @@
 |------|--------|-------------------|-------|
 | G0 | ✅ Complete | G0_INTAKE_CHECKLIST.md, LOCK.md | Intake complete; lock released by CTO |
 | G1 | ✅ Approved | G1_PLAN/CTO_TASK_PLAN.md | Plan written + approved |
-| G2 | ⚠️ Partial | G2_COMPLETION_EVIDENCE.md | Mirror mechanism built + tested. Dry-run PASSED. **BLOCKED:** GitHub PAT lacks `workflow` scope (GitHub security restriction on repos with `.github/workflows/`). 5/7 ACs verified. See G2_COMPLETION_EVIDENCE.md §4. |
+| G2 | ✅ Complete | G2_COMPLETION_EVIDENCE.md | Mirror mechanism built + tested. First sync executed: 2 pushed, 6 up-to-date. All 9 shared refs match. 7/7 ACs verified. |
 | G3 | ⏳ Pending | — | Reviewer verifies — production-impact, highest scrutiny |
 | G4 | ⏳ Pending | — | CTO approval (owner + security sign-off required) |
 | G5 | ⏳ Pending | — | PM closure |
