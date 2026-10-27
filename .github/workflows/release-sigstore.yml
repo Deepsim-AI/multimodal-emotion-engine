@@ -122,30 +122,6 @@ jobs:
           echo "cosign signatures:"
           ls -la dist/*.sig *.sig 2>/dev/null || true
 
-      # TASK_MEE_029: TEMPORARY probe — proves the COSIGN_PRIVATE_KEY secret resolves
-      # in CI and signs correctly. Remove after the tag-push test passes.
-      - name: COSIGN_PROBE (temporary, remove after test)
-        if: always()
-        env:
-          COSIGN_PRIVATE_KEY: "${{ secrets.COSIGN_PRIVATE_KEY }}"
-        run: |
-          set +e
-          echo "=== COSIGN_PROBE ==="
-          if [ -n "${COSIGN_PRIVATE_KEY:-}" ]; then
-            echo "SECRET_PRESENT=YES"
-          else
-            echo "SECRET_PRESENT=NO  <-- the COSIGN_PRIVATE_KEY secret is NOT visible to this job"
-          fi
-          # If a wheel sig exists, verify it against the committed public key locally.
-          if ls dist/*.whl.sig >/dev/null 2>&1; then
-            WHL=$(ls dist/*.whl | head -1)
-            echo "verifying $WHL against cosign-public.pem"
-            openssl dgst -sha256 -verify cosign-public.pem -signature "${WHL}.sig" "$WHL"
-            echo "PROBE_VERIFY_EXIT=$?"
-          else
-            echo "NO wheel .sig produced (Cosign signing step may have failed or been skipped)"
-          fi
-          echo "=== end COSIGN_PROBE ==="
 
       - name: Verify Cosign signatures (CI self-check, Option B)
         run: |
