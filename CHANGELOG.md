@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## Security / Signing (2026-10-26)
+
+- **MEE_029 Option B (Cosign key-based) — G2 implemented 2026-10-26.** Owner selected **Option B
+  (key-based, ECDSA P-256 + SHA-256)** over Option A (Fulcio keyless) on 2026-10-26 after G2
+  investigation confirmed Option A is not deployable in this environment (Rekor v1 requires Trillian,
+  whose server image is not publicly pullable; the "Tessera"/Rekor-v2 backend is unreleased).
+  The key-based path is **additive/parallel** to the existing keyless Sigstore (Fulcio) path — both
+  coexist; **no customer breakage**.
+  - New: `cosign-public.pem` (ECDSA P-256 public key, distributable, committed at repo root + attached
+    to releases). Customers verify with `tools/verify_cosign.sh <artifact>` (offline, `openssl` only).
+  - New: `tools/verify_cosign.sh` — single PASS/FAIL customer verification command (Option B).
+  - `release-sigstore.yml`: added an additive "Sign artifacts with Cosign key" step + CI self-check;
+    the keyless Sigstore step is **unchanged**. Private key is injected as the `COSIGN_PRIVATE_KEY`
+    secret (never committed).
+  - **Customer action:** none required — the existing Sigstore (Fulcio) verification path still works
+    exactly as before. The Option B public key + `.sig` files are an *additional* trust path.
+  - **Private key:** stored only as the Forgejo `COSIGN_PRIVATE_KEY` secret (EC P-256, generated
+    2026-10-26, fingerprint `sha256 a1d2cdf6…`). Rotation + recovery procedures: see
+    `docs/development/reports/TASK_MEE_029/G2_KEY_PROTECTION.md`.
+
 ## Governance (2026-10-26)
 
 - **MEE_024 platform-independence proposal (G1 approved):** architecture proposal only — no
@@ -22,6 +42,18 @@ All notable changes to this project will be documented in this file.
   (v17.0.0+gitea-1.22.0) lacks native OIDC — a plain CLI cosign call sidesteps that gap. Both paths
   coexist during migration; customer impact scoped to public-key distribution (no trust-bundle
   migration). Highest-risk task (production signing) — highest-scrutiny review at G3.
+- **MEE_029 corrected to Option A (Fulcio keyless + OIDC) — owner 2026-10-26.** The owner's two
+  premises favoring Cosign were incorrect: Forgejo Actions **does** have native OIDC (Gitea 1.22.0
+  `id-token: write`; Forgejo at `17.0.0+gitea-1.22.0`, already used on line 12 of `release-sigstore.yml`),
+  and Rekor no longer requires Trillian — **Tessera** (file-based, ARM64-compatible) is production-ready.
+  Plan rewritten to deploy Fulcio keyless signing (self-hosted CA + Rekor/Tessera via Forgejo OIDC
+  identity), parallel to existing path; customer impact scoped to new-Fulcio-root trust-bundle migration.
+- **MEE_030 Enable mirror (G1 approved 2026-10-26):** enable the one-way Forgejo→GitHub mirror from
+  MEE_026_B. First production-impact task in the mirror lineage. Deploys a Forgejo push webhook +
+  mirror runner (`git push --mirror`, fail-closed on scope violations); MEE (public) auto-mirrors.
+  One-way enforced; private/commercial repos require per-repo owner allowlist. Highest-scrutiny
+  G3 review (accidental private-repo exposure risk). Owner decisions needed: trigger granularity,
+  allowlist policy, alerting channel.
 - **MEE_023** formally closed as OBE (Obsoleted by completion) — all 5 AC verified as delivered by MEE_022.
 
 ## [v0.4.5] — 2026-10-25

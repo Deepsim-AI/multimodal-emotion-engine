@@ -9,7 +9,7 @@ name: release-sigstore-sign
   workflow_dispatch:
 
 permissions:
-  id-token: write   # Sigstore keyless signing via OIDC
+  id-token: write   # Sigstore keyless signing via OIDC (Option A, primary path)
   contents: write   # Create GitHub releases
 
 jobs:
@@ -89,6 +89,47 @@ jobs:
           done
           ls -la dist/*.sigstore.json *.sigstore.json 2>/dev/null || true
 
+      # TASK_MEE_029 (Option B — owner 2026-10-26): additive key-based signing path.
+      # Proven in MEE_025_A POC: ECDSA P-256 + SHA-256 (openssl dgst), no Rekor/
+      # registry dependency. Runs PARALLEL to the keyless Sigstore path above; both
+      # coexist during migration (AC: no breakage). The private key is injected as a
+      # secret (never committed); the public key (cosign-public.pem) is committed and
+      # distributed to customers.
+      - name: Sign artifacts with Cosign key (Option B, additive)
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "${COSIGN_PRIVATE_KEY:-}" ] || { echo "ERROR: COSIGN_PRIVATE_KEY secret not set"; exit 1; }
+          # Stage the private key to a temp file with 0600 perms (do not echo value).
+          KEYFILE="$(mktemp)"
+          chmod 600 "$KEYFILE"
+          printf '%s' "$COSIGN_PRIVATE_KEY" > "$KEYFILE"
+          trap 'rm -f "$KEYFILE"' EXIT
+          # cosign key files must be SEC1 EC format (# EC PRIVATE KEY). Convert if needed.
+          if ! head -1 "$KEYFILE" | grep -q "BEGIN EC PRIVATE KEY"; then
+            openssl ec -in "$KEYFILE" -out "$KEYFILE" 2>/dev/null || true
+          fi
+          # Sign every release artifact (wheel, sdist, manifest, anchor).
+          for artifact in MEE_RELEASE_MANIFEST.json MEE_INTEGRITY_HASHES.txt dist/*.whl dist/*.tar.gz; do
+            [ -e "$artifact" ] || continue
+            echo "cosign-signing $artifact"
+            openssl dgst -sha256 -sign "$KEYFILE" -out "${artifact}.sig" "$artifact"
+          done
+          echo "cosign signatures:"
+          ls -la dist/*.sig *.sig 2>/dev/null || true
+
+      - name: Verify Cosign signatures (CI self-check, Option B)
+        run: |
+          set -euo pipefail
+          # Public key is committed at repo root (distributable).
+          for artifact in MEE_RELEASE_MANIFEST.json MEE_INTEGRITY_HASHES.txt dist/*.whl dist/*.tar.gz; do
+            [ -e "$artifact" ] || continue
+            echo "cosign-verifying $artifact"
+            openssl dgst -sha256 -verify cosign-public.pem -signature "${artifact}.sig" "$artifact"
+          done
+          echo "All Cosign (Option B) verifications PASSED"
+
       - name: Verify signatures (CI self-check)
         # TASK_MEE_022 G2-1.5: fail fast if any signature is invalid.
         run: |
@@ -122,14 +163,19 @@ jobs:
           name: "Release ${{ github.ref_name }}"
           # TASK_MEE_022 G2-1.5: attach ALL bundles — dist/ bundles were
           # missing from v0.4.4 because the glob only matched the repo root.
+          # TASK_MEE_029 (Option B): attach Cosign .sig files + committed public key.
           files: |
             dist/*.whl
             dist/*.tar.gz
             dist/*.sigstore.json
+            dist/*.sig
             MEE_RELEASE_MANIFEST.json
             MEE_INTEGRITY_HASHES.txt
             MEE_RELEASE_MANIFEST.json.sigstore.json
             MEE_INTEGRITY_HASHES.txt.sigstore.json
+            MEE_RELEASE_MANIFEST.json.sig
+            MEE_INTEGRITY_HASHES.txt.sig
+            cosign-public.pem
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
