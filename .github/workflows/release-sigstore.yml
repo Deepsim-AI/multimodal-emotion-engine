@@ -15,8 +15,6 @@ permissions:
 jobs:
   build-and-sign:
     runs-on: ubuntu-latest
-    container:
-      image: python:3.11-bookworm
     timeout-minutes: 15
 
     steps:
@@ -27,6 +25,8 @@ jobs:
 
       - name: Install build tooling
         run: |
+          apt-get update -qq
+          apt-get install -y -qq python3-pip
           python3 -m pip install --upgrade pip
           python3 -m pip install "build>=1.0,<2.0"
           python3 -m pip install "sigstore>=3.6,<4"  # 3.x (2.x broken with cryptography>=47)
