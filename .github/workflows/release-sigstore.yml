@@ -26,10 +26,12 @@ jobs:
       - name: Install build tooling
         run: |
           apt-get update -qq
-          apt-get install -y -qq python3-pip
-          python3 -m pip install --upgrade pip
-          python3 -m pip install "build>=1.0,<2.0"
-          python3 -m pip install "sigstore>=3.6,<4"  # 3.x (2.x broken with cryptography>=47)
+          apt-get install -y -qq python3-pip python3-venv
+          python3 -m venv /opt/venv
+          /opt/venv/bin/pip install --upgrade pip
+          /opt/venv/bin/pip install "build>=1.0,<2.0"
+          /opt/venv/bin/pip install "sigstore>=3.6,<4"  # 3.x (2.x broken with cryptography>=47)
+          echo "/opt/venv/bin" >> "$GITHUB_PATH"
 
       - name: Build wheel and sdist
         run: python3 -m build --sdist --wheel
