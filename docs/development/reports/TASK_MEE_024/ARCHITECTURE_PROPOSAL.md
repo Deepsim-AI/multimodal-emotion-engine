@@ -722,6 +722,32 @@ Forgejo remains the canonical source of truth.
 5. Define **failure handling** — alerting, retry policy, manual fallback procedures
 6. Define **audit evidence** — webhook logs, sync verification checksums
 
+### Trigger Scope / Tiered Mirroring (Clarified 2026-10-26 by gateway-owner)
+
+**Clarification of the Decision 2 boundary.** Mirroring is a *push-direction* mechanism, not a
+repo-specific property. Forgejo is the canonical source of truth; GitHub is a **one-way mirror**
+(Forgejo → GitHub, webhook-driven `git push --mirror`). The trigger is gated by repo class:
+
+| Repo class | Mirror to GitHub | Trigger | Rationale |
+|------------|------------------|---------|-----------|
+| **Open-source / public** | ✅ Mirrored | **Automated** — any push to Forgejo auto-syncs to GitHub. | Mirroring public code is low-risk and expected; no per-push approval needed. |
+| **Private / commercial / internal** | ⛔ Not mirrored by default | **Owner decision required per repo** — added to an allowlist before mirroring. | Backup may be a valid reason, but exposure risk requires explicit owner authorization. |
+
+**Operational model (replaces the per-repo eligibility framing in MEE_026 B):**
+- The mirror is a single mechanism (Forgejo webhook → GitHub mirror). It is *not* re-spun per repo.
+- Each repo is tagged at Forgejo as `public` (auto-mirror) or `private` (allowlist-gated).
+- MEE (`Deepsim-AI/multimodal-emotion-engine`) is **public** → qualifies for automatic one-way mirror.
+- The allowlist for private/commercial repos is the owner's explicit approval gate (never auto).
+
+**Implication for MEE_026 B:** The task spec must describe the *mechanism + tiering*, not
+"which repos to mirror" (there is no mirror repo to specify today, and MEE already lives on GitHub).
+The eligibility question collapses into: *classify each repo as public (auto) or private (allowlist)*.
+
+**Verification evidence cited by owner:** Forgejo already hosts MEE's real PyPI packages and is the
+canonical repo (per MEE_024 §1); GitHub is confirmed as mirror-only. The MEE repo is public, so it
+auto-mirrors; private/commercial repos remain gated until the owner decides otherwise (e.g., for
+backup).
+
 **Verification evidence cited by owner:** The MEE repo (Deepsim-AI/multimodal-emotion-engine) is
 already published to GitHub from Forgejo via TASK_MEE_022 G5 closure commits. Mirror functionality
 can use the existing bot token (`/home/deepsim/Documents/shouke/workspace/bot_github_org_token.txt`)

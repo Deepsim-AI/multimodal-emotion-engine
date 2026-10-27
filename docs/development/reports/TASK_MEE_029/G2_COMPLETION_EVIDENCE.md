@@ -172,4 +172,42 @@ Option A). This is documented, not a defect.
 
 ---
 
+## 7. CI Verification — Full Pipeline Success (2026-10-27)
+
+**Task 38** (runner) — **🏁 Job succeeded** at 2026-10-27T14:41:14Z
+
+### Pipeline stages (all passing):
+
+| Stage | Result | Evidence |
+|-------|--------|----------|
+| Python env setup (venv + pip + build) | ✅ | `Successfully installed build-1.6.1` |
+| Package build (wheel + sdist) | ✅ | `Successfully built multimodal_emotion_engine-0.4.5.tar.gz and multimodal_emotion_engine-0.4.5-py3-none-any.whl` |
+| Cosign key-based signing (Option B) | ✅ | All artifacts signed |
+| Cosign verification (CI self-check) | ✅ | **5× "Verified OK"** + **"All Cosign (Option B) verifications PASSED"** |
+| Sigstore keyless (Option A) | ⚠️ skipped | `continue-on-error` — no OIDC on Forgejo; non-fatal by design |
+| Forgejo Release creation | ✅ | `Release ID: 21`, tag `v0.4.5` |
+| Asset upload (9 files) | ✅ | wheel, sdist, 2× .sig, manifest, hashes, 2× manifest/hashes .sig, cosign-public.pem |
+
+### Verified artifacts:
+- `MEE_RELEASE_MANIFEST.json` → **Verified OK**
+- `MEE_INTEGRITY_HASHES.txt` → **Verified OK**
+- `multimodal_emotion_engine-0.4.5-py3-none-any.whl` → **Verified OK**
+- `multimodal_emotion_engine-0.4.5.tar.gz` → **Verified OK**
+
+### Release URL:
+`https://forge.deepsim.ai:8443/deepsim/multimodal-emotion-engine/releases/tag/v0.4.5`
+
+### Issues fixed during CI verification (2026-10-27):
+| Issue | Fix | Commit |
+|-------|-----|--------|
+| `node:22-bookworm` has no pip | `apt-get install python3-pip python3-venv` + venv | `2b79a71` |
+| PEP 668 externally-managed-environment | Use `/opt/venv` instead of system pip | `2b79a71` |
+| Sigstore keyless fails (no OIDC) | `continue-on-error: true` (non-fatal) | `3837229` |
+| Forgejo YAML: comments between step props | Remove all such comments | `ff32938` |
+| Forgejo YAML: invalid `server.url` context | Hardcode `https://forge.deepsim.ai:8443` | `9e8a831` |
+| Asset upload: wrong endpoint `/releases/attachments` | Use `/releases/{id}/assets?name=` | `bcc6cff` |
+| Release ID parsing (grep failed on JSON) | Use `python3 -c` for reliable JSON parse | `bcc6cff` |
+
+---
+
 *End of G2 completion evidence (Option B). CI verification added 2026-10-27.*
