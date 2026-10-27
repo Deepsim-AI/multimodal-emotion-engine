@@ -79,7 +79,7 @@ jobs:
           PY
 
       - name: Sign artifacts with Sigstore (keyless)
-        continue-on-error: true  # Forgejo doesn't have GitHub OIDC; this step is expected to fail there.
+        continue-on-error: true
         # The Cosign key-based path below is the primary signing mechanism (MEE_029).
         run: |
           # sigstore 3.x: positional file arg (not --file).
@@ -159,9 +159,6 @@ jobs:
           echo "All Cosign (Option B) verifications PASSED"
 
       - name: Verify signatures (CI self-check)
-        # TASK_MEE_022 G2-1.5: fail fast if any signature is invalid.
-        # continue-on-error: Sigstore keyless signing may not have succeeded on
-        # Forgejo (no GitHub OIDC). The Cosign verification above is the primary check.
         continue-on-error: true
         run: |
           set -euo pipefail
