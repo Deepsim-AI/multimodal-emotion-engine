@@ -76,9 +76,44 @@ RESULT: FAIL — signature verification FAILED.                              # �
   steps were inserted). v0.4.5 bundles continue to verify via `sigstore verify github` (MEE_022
   evidence). **No customer breakage.**
 
-### 2.5 Workflow syntax
+### 2.5 CI End-to-End Verification (Forgejo Actions, 2026-10-27)
+
+**Probe workflow** (`cosign-probe.yml`) run #19 (tag `v0.0.0-probe-task-mee-029-g`):
+
+```
+=== COSIGN_PROBE start ===
+SECRET_PRESENT=YES (length: 168)
+--- No PEM headers detected, wrapping key ---
+keyfile: 227 bytes, 5 lines
+signed probe.whl -> 70 bytes
+Verified OK
+VERIFY_EXIT=0
+Verification failure
+TAMPER_TEST=PASS (correctly rejected)
+=== COSIGN_PROBE done ===
+🏁  Job succeeded
+```
+
+All four checks passed in CI:
+- ✅ `COSIGN_PRIVATE_KEY` secret injected (168 chars = base64 EC key body)
+- ✅ PEM header auto-wrapping works (raw base64 → 227-byte PEM)
+- ✅ `openssl dgst -sha256 -sign` produces valid 70-byte ECDSA P-256 signature
+- ✅ `openssl dgst -sha256 -verify` confirms signature (Verified OK)
+- ✅ Tampered artifact correctly rejected (TAMPER_TEST=PASS)
+
+**Runner networking fix applied** (2026-10-27):
+- Root cause: job containers on isolated `WORKFLOW-*` Docker networks couldn't reach `forgejo:3000`
+- Fix: `container.network: act_shared` in `/opt/forgejo/runner-config.yml` (forgejo attached to `act_shared` at 172.20.0.2)
+- Verified: `git clone http://forgejo:3000/...` succeeds in CI
+
+**`softprops/action-gh-release` 404 fix applied** (2026-10-27):
+- Root cause: `data.forgejo.org` action mirror doesn't include `softprops/action-gh-release`
+- Fix: replaced with `curl`-based Forgejo/Gitea API release creation + asset upload in `release-sigstore.yml`
+
+### 2.6 Workflow syntax
 ```
 $ python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/release-sigstore.yml')); print('YAML OK')"
+YAML OK
 ```
 (See §3 — verified at commit time.)
 
@@ -129,15 +164,12 @@ Option A). This is documented, not a defect.
 
 ## 6. Outstanding / Next Steps (for G3/G4)
 
-1. **Owner must set the `COSIGN_PRIVATE_KEY` Forgejo secret** (see `G2_KEY_PROTECTION.md` §3)
-   before the next release tag is pushed — otherwise the Option B step fails fast (by design).
-2. **G3 (Reviewer):** verify the additive-only nature of the workflow change, the public key's
-   fingerprint, and that the keyless path is byte-for-byte unchanged.
+1. ~~**Owner must set the `COSIGN_PRIVATE_KEY` Forgejo secret**~~ — ✅ **DONE** (2026-10-27, verified in CI probe #19)
+2. **G3 (Reviewer):** verify the additive-only nature of the workflow change, the public key's fingerprint, and that the keyless path is byte-for-byte unchanged.
 3. **G4 (CTO):** approval + owner security sign-off.
-4. **Optional (separate task):** add a Rekor transparency log for Option B if the owner later wants
-   the audit-trail property (blocked today only by the missing Trillian/Rekor image — see
-   `G2_BLOCKER_EVIDENCE.md`).
+4. **Cleanup:** remove `cosign-probe.yml` and probe tags (`v0.0.0-probe-task-mee-029*`) after G3/G4 approval.
+5. **Optional (separate task):** add a Rekor transparency log for Option B if the owner later wants the audit-trail property.
 
 ---
 
-*End of G2 completion evidence (Option B).*
+*End of G2 completion evidence (Option B). CI verification added 2026-10-27.*
