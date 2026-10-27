@@ -97,19 +97,21 @@ jobs:
       # distributed to customers.
       - name: Sign artifacts with Cosign key (Option B, additive)
         env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PRIVATE_KEY: "${{ secrets.COSIGN_PRIVATE_KEY }}"
         run: |
           set -euo pipefail
           [ -n "${COSIGN_PRIVATE_KEY:-}" ] || { echo "ERROR: COSIGN_PRIVATE_KEY secret not set"; exit 1; }
           # Stage the private key to a temp file with 0600 perms (do not echo value).
           KEYFILE="$(mktemp)"
           chmod 600 "$KEYFILE"
-          printf '%s' "$COSIGN_PRIVATE_KEY" > "$KEYFILE"
-          trap 'rm -f "$KEYFILE"' EXIT
-          # cosign key files must be SEC1 EC format (# EC PRIVATE KEY). Convert if needed.
-          if ! head -1 "$KEYFILE" | grep -q "BEGIN EC PRIVATE KEY"; then
-            openssl ec -in "$KEYFILE" -out "$KEYFILE" 2>/dev/null || true
+          # If the secret is raw base64 (no PEM headers), wrap it.
+          if ! echo "$COSIGN_PRIVATE_KEY" | grep -q "BEGIN EC PRIVATE KEY"; then
+            echo "--- No PEM headers detected, wrapping key ---"
+            { echo "-----BEGIN EC PRIVATE KEY-----"; echo "$COSIGN_PRIVATE_KEY"; echo "-----END EC PRIVATE KEY-----"; } > "$KEYFILE"
+          else
+            printf '%s\n' "$COSIGN_PRIVATE_KEY" > "$KEYFILE"
           fi
+          trap 'rm -f "$KEYFILE"' EXIT
           # Sign every release artifact (wheel, sdist, manifest, anchor).
           for artifact in MEE_RELEASE_MANIFEST.json MEE_INTEGRITY_HASHES.txt dist/*.whl dist/*.tar.gz; do
             [ -e "$artifact" ] || continue
@@ -180,27 +182,43 @@ jobs:
 
       - name: Create GitHub Release
         id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "${{ github.ref_name }}"
-          name: "Release ${{ github.ref_name }}"
-          # TASK_MEE_022 G2-1.5: attach ALL bundles — dist/ bundles were
-          # missing from v0.4.4 because the glob only matched the repo root.
-          # TASK_MEE_029 (Option B): attach Cosign .sig files + committed public key.
-          files: |
-            dist/*.whl
-            dist/*.tar.gz
-            dist/*.sigstore.json
-            dist/*.sig
-            MEE_RELEASE_MANIFEST.json
-            MEE_INTEGRITY_HASHES.txt
-            MEE_RELEASE_MANIFEST.json.sigstore.json
-            MEE_INTEGRITY_HASHES.txt.sigstore.json
-            MEE_RELEASE_MANIFEST.json.sig
-            MEE_INTEGRITY_HASHES.txt.sig
-            cosign-public.pem
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          FORGEJO_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          RELEASE_TAG: "${{ github.ref_name }}"
+        run: |
+          set -euo pipefail
+          # Forgejo/Gitea API: create release + upload assets.
+          # This replaces softprops/action-gh-release@v2 which 404s on data.forgejo.org.
+          API="${GITHUB_SERVER_URL:-https://forge.deepsim.ai:8443}/api/v1"
+          REPO="${GITHUB_REPOSITORY:-deepsim/multimodal-emotion-engine}"
+          AUTH="Authorization: Bearer ${GITHUB_TOKEN}"
+
+          # Create release (ignore 422 if it already exists)
+          curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            -d "{\"tag_name\": \"$RELEASE_TAG\", \"name\": \"Release $RELEASE_TAG\", \"body\": \"Signed release for $RELEASE_TAG\"}" \
+            "$API/repos/$REPO/releases" || echo "Release may already exist (422) — continuing"
+
+          # Upload each asset
+          upload_asset() {
+            local file="$1"
+            local name="$(basename "$file")"
+            echo "Uploading $name..."
+            curl -sf -X POST -H "$AUTH" -H "Content-Type: application/octet-stream" \
+              -H "Content-Disposition: attachment; filename=\"$name\"" \
+              --data-binary @"$file" \
+              "$API/repos/$REPO/releases/attachments"
+          }
+
+          for f in dist/*.whl dist/*.tar.gz dist/*.sigstore.json dist/*.sig \
+                   MEE_RELEASE_MANIFEST.json MEE_INTEGRITY_HASHES.txt \
+                   MEE_RELEASE_MANIFEST.json.sigstore.json MEE_INTEGRITY_HASHES.txt.sigstore.json \
+                   MEE_RELEASE_MANIFEST.json.sig MEE_INTEGRITY_HASHES.txt.sig \
+                   cosign-public.pem; do
+            [ -e "$f" ] || continue
+            upload_asset "$f"
+          done
+          echo "Release $RELEASE_TAG created with all assets"
 
       - name: Show outputs
         run: |
