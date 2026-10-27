@@ -28,7 +28,7 @@
 | MEE_027_C | Historical Release Documentation (v0.4.4 defect + MEE_023 OBE closure) | ✅ **G4 APPROVED — CLOSED** | 2026-10-26 |
 | MEE_024 | Platform Independence Architecture Proposal | ✅ **G1 APPROVED** (architecture proposal only) | 2026-10-26 |
 | MEE_026_B | Forgejo→GitHub one-way mirror mechanism (spec) | ✅ **G4 APPROVED — CLOSED (G5)** | 2026-10-26 |
-| MEE_029 | Fulcio keyless release signing deployment (Option A) | 🆕 **G1 approved — impl pending** | 2026-10-26 |
+| MEE_029 | Cosign key-based release signing (Option B) | ✅ **G4 APPROVED — CLOSED (G5)** | 2026-10-27 |
 | MEE_030 | Enable one-way Forgejo→GitHub mirror (MEE_026_B spec) | 🆕 **G1 approved — impl pending** | 2026-10-26 |
 
 
