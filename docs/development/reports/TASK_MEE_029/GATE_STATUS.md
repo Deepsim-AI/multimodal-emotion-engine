@@ -13,7 +13,7 @@
 | G1 | ✅ Approved (with correction) | G1_PLAN/CTO_TASK_PLAN.md | G1 plan approved but Option A was later proven un-deployable (see below) |
 | G2 | ✅ Complete (Option B) + CI verified | G2_COMPLETION_EVIDENCE.md §7, G2_KEY_PROTECTION.md, cosign-public.pem, tools/verify_cosign.sh | Cosign key-based signing implemented + validated. **CI pipeline verified 2026-10-27 (task 38): build → sign → verify (5× Verified OK) → release v0.4.5 → 9 assets uploaded.** |
 | G3 | ✅ Approved | REVIEW_REPORT.md, G3_REVIEW_PACKAGE.md | **Conditional approval** — approve Option B implementation; documentation must be corrected (see below); COSIGN_PROBE removed (post-G3 cleanup) |
-| G4 | ✅ Approved | CTO_APPROVAL.md (pending write) | See CTO assessment above — approved with required cleanup items completed |
+| G4 | ✅ Approved | CTO_APPROVAL.md | See CTO assessment above — approved with required cleanup items completed |
 | G5 | ⏳ Pending | — | PM closure (update PROJECT_STATUS.md, CHANGELOG, send PM_CLOSED) |
 
 ## Historical Context: Option A Blocked → Pivoted to Option B
