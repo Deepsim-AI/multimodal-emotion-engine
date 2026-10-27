@@ -11,7 +11,7 @@
 |------|--------|-------------------|-------|
 | G0 | ✅ Complete | G0_INTAKE_CHECKLIST.md, LOCK.md, RELEASED.md | Intake complete; lock released by CTO |
 | G1 | ✅ Approved | G1_PLAN/CTO_TASK_PLAN.md | CTO plan (Option A) approved — exact file/line guidance |
-| G2 | ✅ Complete (Option B) | G2_COMPLETION_EVIDENCE.md, G2_KEY_PROTECTION.md, cosign-public.pem, tools/verify_cosign.sh | Additive Cosign key-based signing implemented + validated (sign/verify/tamper). Keyless Sigstore path unchanged. Owner decision 2026-10-26. |
+| G2 | ✅ Complete (Option B) + CI verified | G2_COMPLETION_EVIDENCE.md §7, G2_KEY_PROTECTION.md, cosign-public.pem, tools/verify_cosign.sh | Cosign key-based signing implemented + validated. **CI pipeline verified 2026-10-27 (task 38): build → sign → verify (5× Verified OK) → release v0.4.5 → 9 assets uploaded.** |
 | G3 | ⏳ Pending | — | Reviewer verification (production signing change — highest scrutiny) |
 | G4 | ⏳ Pending | — | CTO approval (owner + security sign-off required) |
 | G5 | ⏳ Pending | — | PM closure |
