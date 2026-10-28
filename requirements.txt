@@ -15,8 +15,14 @@ sounddevice>=0.4
 librosa>=0.10
 
 # Demo (optional extras)
-streamlit>=1.28
+streamlit>=1.36
 
 # Development/testing
 pytest>=7.4
 pytest-cov>=4.1
+
+# Security pins for transitive dependencies ( Dependabot )
+urllib3>=1.26.18
+pyyaml>=6.0.1
+jinja2>=3.1.4
+cryptography>=41.0.6
