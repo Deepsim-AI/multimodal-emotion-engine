@@ -1,4 +1,4 @@
-# Multimodal Emotion Engine (MEE) v0.4.3
+# Multimodal Emotion Engine (MEE) v0.4.5
 
 An independent, locally-deployable AI capability that estimates a user's affective state from multiple input modalities: visual (facial expression) and voice (acoustic characteristics).
 
@@ -149,7 +149,7 @@ multimodal-emotion-engine/
 
 ## Status
 
-**✅ v0.4.3 — All tasks complete** (G1→G5 for all MEE tasks through MEE_020; signed distribution pipeline operational)
+**✅ v0.4.5 — All tasks complete** (G1→G5 for all MEE tasks through MEE_020; signed distribution pipeline operational)
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design documentation.
 
@@ -224,3 +224,9 @@ All model weights used in production are released under commercial-safe licenses
 ---
 *MEE remains an independent capability, not tied to the AI Companion book or any specific robot.*
 *“Affective-state estimation” — never “reads true emotion.”*
+
+---
+
+**Suggested Citation:**
+
+Wei, S. (2026). *MEE: A Multimodal Affective State Estimation Engine for AI Companions and Intelligent Robots*. Deepsim AI Lab Research & Technical Notes, DAI-LAB-TN-2026-003. Version 1.0. Deepsim Press. DOI: https://doi.org/10.5281/zenodo.23669367  
