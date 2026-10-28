@@ -30,49 +30,66 @@ locked until you activate a key.
 demo, or email `licensing@deepsim.com`. No credit card required.
 - **Paid plans (Developer, Commercial, Enterprise, OEM/Embedded):** see the
 [Licensing & Plans](#licensing--plans-task_mee_019) section below for checkout links.
-- **Verify a release:** every GitHub release ships with a Sigstore signature bundle
+- **Verify a release:** every release ships with a Sigstore signature bundle
   (`.sigstore.json`) and a SHA-256 manifest. Verify with:
   ```bash
   pip install sigstore
   ./tools/verify_release.sh multimodal_emotion_engine-*.whl MEE_RELEASE_MANIFEST.json multimodal_emotion_engine-*.whl.sigstore.json
   ```
 
+**Install:** see [Deepsim Hub](https://hub.deepsim.ai:8443/Deepsim) — one-line pip install, no GitHub access needed.
+
 ## Install
 
-MEE is distributed as a **signed wheel from GitHub Releases** (not on PyPI).
-Download the latest release assets, then install the wheel:
+MEE is distributed via the **Deepsim Hub** registry (v0.4.5). Install directly with pip — no GitHub access needed:
 
 ```bash
-# 1. Download the latest release artifacts
-#    (wheel, sdist, MEE_RELEASE_MANIFEST.json, MEE_INTEGRITY_HASHES.txt, .sigstore.json bundles)
-git clone --depth 1 https://github.com/Deepsim-AI/multimodal-emotion-engine.git
-cd multimodal-emotion-engine
-
-# 2. Install from the signed wheel in the GitHub release (preferred)
-#    Grab the .whl from https://github.com/Deepsim-AI/multimodal-emotion-engine/releases
-pip install multimodal_emotion_engine-0.4.5-py3-none-any.whl
-
-#    — or install from source (repo checkout) —
-pip install .
+# Install MEE from the Hub registry
+pip install \
+  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  multimodal-emotion-engine
 ```
 
 ### With optional feature sets
 ```bash
-# Full vision + voice pipeline
-pip install ".[vision]"
-pip install ".[voice]"
+# Full vision pipeline
+pip install \
+  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  multimodal-emotion-engine[vision]
+
+# Voice pipeline
+pip install \
+  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  multimodal-emotion-engine[voice]
 
 # Demo UI (Streamlit-based)
-pip install ".[demo]"
+pip install \
+  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  multimodal-emotion-engine[demo]
+```
 
-# Development/testing
+### Mixed Hub + public PyPI dependencies
+When your project also needs packages from public PyPI:
+```bash
+pip install \
+  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple \
+  --extra-index-url https://pypi.org/simple \
+  multimodal-emotion-engine[vision]
+```
+
+### From source (development)
+```bash
+git clone --depth 1 https://github.com/Deepsim-AI/multimodal-emotion-engine.git
+cd multimodal-emotion-engine
 pip install ".[dev]"
 ```
 
-> **Tip:** to install a specific release, download the matching `.whl` from the
-> [Releases](https://github.com/Deepsim-AI/multimodal-emotion-engine/releases) page and run
-> `pip install <that-file>.whl`. The optional extras above work the same way once the
-> base wheel is installed (e.g. `pip install multimodal_emotion_engine-0.4.5-py3-none-any.whl[vision]`).
+> **Verify a release:** every release ships with a Sigstore signature bundle
+> (`.sigstore.json`) and a SHA-256 manifest. Verify with:
+> ```bash
+> pip install sigstore
+> ./tools/verify_release.sh multimodal_emotion_engine-*.whl MEE_RELEASE_MANIFEST.json multimodal_emotion_engine-*.whl.sigstore.json
+> ```
 
 ### Download model weights
 The production weights live in the canonical `models/` tree (not shipped with the
