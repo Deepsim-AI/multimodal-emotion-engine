@@ -29,7 +29,7 @@
 | MEE_024 | Platform Independence Architecture Proposal | ✅ **G1 APPROVED** (architecture proposal only) | 2026-10-26 |
 | MEE_026_B | Forgejo→GitHub one-way mirror mechanism (spec) | ✅ **G4 APPROVED — CLOSED (G5)** | 2026-10-26 |
 | MEE_029 | Cosign key-based release signing (Option B) | ✅ **G4 APPROVED — CLOSED (G5)** | 2026-10-27 |
-| MEE_030 | Enable one-way Forgejo→GitHub mirror (MEE_026_B spec) | 🆕 **G1 approved — impl pending** | 2026-10-26 |
+| MEE_030 | Enable one-way Forgejo→GitHub mirror (MEE_026_B spec) | ✅ **G4 APPROVED — CLOSED (G5)** | 2026-10-27 |
 
 
 ---
@@ -135,11 +135,9 @@ tags/releases/publication; no production credentials used; private keys never le
 **Post-G4:** this PM entry updates `PROJECT_STATUS.md` + `CHANGELOG.md`; task closed. Local commit of
 approved work remains pending; remote push still needs user confirmation of target repo + branch.
 
-## TASK_MEE_027_C — Historical Release Documentation + TASK_MEE_023 OBE Closure ✅ G4 APPROVED — CLOSED (2026-10-26)
+## Blockers
 
-**Deliverable:** Transparent documentation of the MEE v0.4.4 signing-bundle defect (no artifact
-modification, no tag movement) + closure of TASK_MEE_023 (Hub Portal Update) as **OBE (Obsoleted by
-completion)** with all 5 original acceptance criteria verified against TASK_MEE_022 evidence.
+None.
 
 **What was documented:**
 - v0.4.4 shipped only **6 assets** — wheel/sdist lacked attached `.sigstore.json` bundles — because the
@@ -155,6 +153,33 @@ attributable to MEE_023 itself.
 
 **Post-G4:** this PM entry updates `PROJECT_STATUS.md`; CHANGELOG.md entry present (G2). Local commit of
 approved work remains pending; remote push still needs user confirmation of target repo + branch.
+
+## TASK_MEE_030 — Enable One-Way Forgejo→GitHub Mirror ✅ G4 APPROVED — CLOSED (G5) 2026-10-27
+
+**Deliverable:** Operational one-way Forgejo→GitHub mirror for MEE (`deepsim-ai/multimodal-emotion-engine`).
+First production-impact task in the mirror lineage (from the MEE_026_B spec). Deployed on the VPS at
+`/opt/mirror/` — **infrastructure only, no changes to the MEE repo**.
+
+**Implementation (G2, verified G3+G4):**
+- `mirror_sync.py` (227 lines) performs `git push --mirror` to GitHub only — one-way enforced by credential
+  separation (`deepsim-ai-bot` has no Forgejo write access).
+- **Fail-closed allowlist** (`allowlist.yaml`, default-deny) — MEE explicitly listed with full metadata
+  (repo, destination, visibility, license, approved_by, approved_on, review_due). Two deny tests PASSED
+  (exit code 1 + alert).
+- **Token scope minimal:** push + read + workflow, no admin/delete scopes. Credential `600` perms on VPS.
+- **Drift/force-push protection:** `git merge-base` non-fast-forward detection, exit code 3 + alert.
+- **History preserved:** explicit ref push (full clone), not shallow.
+- First live sync 2026-10-27T22:01Z: **2 pushed, 6 up-to-date, 0 mismatches** across all 9 refs.
+
+**Owner decisions (all resolved 2026-10-27, see OWNER_DECISIONS.md):** trigger granularity (branches+tags,
+not `--mirror`, with destructive-change detection); allowlist policy (default-deny); alerting (fail-closed,
+immediate on failure).
+
+**Outstanding (non-blocking, deferred per CTO G4):** Forgejo webhook (AC1) is currently cron-based — can be
+upgraded to a real webhook via change request later without re-approval. Review due 2027-10-27.
+
+**Post-G4 (this task, G5):** updated `PROJECT_STATUS.md` + `CHANGELOG.md`; PM_CLOSED notification sent;
+local commit of approved work. Remote push to GitHub still needs user confirmation of target repo + branch.
 
 ## Blockers
 

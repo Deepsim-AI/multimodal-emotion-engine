@@ -54,6 +54,13 @@ All notable changes to this project will be documented in this file.
   One-way enforced; private/commercial repos require per-repo owner allowlist. Highest-scrutiny
   G3 review (accidental private-repo exposure risk). Owner decisions needed: trigger granularity,
   allowlist policy, alerting channel.
+- **MEE_030 CLOSED (G4 2026-10-27 + G5 2026-10-27):** mirror operational. First live sync
+  2026-10-27T22:01Z (2 pushed, 6 up-to-date, 0 mismatches). Deployed at `/opt/mirror/` (VPS, infra
+  only — no MEE repo changes). Fail-closed allowlist (MEE explicitly allowlisted), one-way by credential
+  separation, minimal token scope (push+read+workflow, no admin), force-push/drift detection, full
+  history. Owner decisions resolved 2026-10-27 (trigger = branches+tags w/ destructive-change detect;
+  default-deny allowlist; fail-closed alerting). AC1 (webhook) currently cron-based — non-blocking,
+  upgradeable via CR later. Review due 2027-10-27.
 - **MEE_023** formally closed as OBE (Obsoleted by completion) — all 5 AC verified as delivered by MEE_022.
 
 ## [v0.4.5] — 2026-10-25
