@@ -170,7 +170,8 @@ jobs:
           TOKEN="${FORGEJO_TOKEN:-${{ secrets.FORGEJO_TOKEN }}}"
           [ -n "$TOKEN" ] || { echo "ERROR: FORGEJO_TOKEN not available"; exit 1; }
           API="https://forge.deepsim.ai:8443/api/v1"
-          REPO="deepsim/multimodal-emotion-engine"
+          # Repo is owned by the Deepsim org (owner_id 4), not a user.
+          REPO="Deepsim/multimodal-emotion-engine"
           AUTH="Authorization: Bearer $TOKEN"
 
           # Create release (ignore 422 if it already exists)

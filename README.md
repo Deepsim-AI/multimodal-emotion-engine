@@ -46,7 +46,7 @@ MEE is distributed via the **Deepsim Hub** registry (v0.4.5). Install directly w
 ```bash
 # Install MEE from the Hub registry
 pip install \
-  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  --index-url https://hub.deepsim.ai:8443/api/packages/Deepsim/pypi/simple/ \
   multimodal-emotion-engine
 ```
 
@@ -54,17 +54,17 @@ pip install \
 ```bash
 # Full vision pipeline
 pip install \
-  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  --index-url https://hub.deepsim.ai:8443/api/packages/Deepsim/pypi/simple/ \
   multimodal-emotion-engine[vision]
 
 # Voice pipeline
 pip install \
-  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  --index-url https://hub.deepsim.ai:8443/api/packages/Deepsim/pypi/simple/ \
   multimodal-emotion-engine[voice]
 
 # Demo UI (Streamlit-based)
 pip install \
-  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple/ \
+  --index-url https://hub.deepsim.ai:8443/api/packages/Deepsim/pypi/simple/ \
   multimodal-emotion-engine[demo]
 ```
 
@@ -72,7 +72,7 @@ pip install \
 When your project also needs packages from public PyPI:
 ```bash
 pip install \
-  --index-url https://hub.deepsim.ai:8443/api/packages/deepsim/pypi/simple \
+  --index-url https://hub.deepsim.ai:8443/api/packages/Deepsim/pypi/simple \
   --extra-index-url https://pypi.org/simple \
   multimodal-emotion-engine[vision]
 ```
