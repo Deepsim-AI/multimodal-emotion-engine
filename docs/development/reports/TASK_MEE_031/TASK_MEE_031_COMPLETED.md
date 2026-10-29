@@ -140,16 +140,37 @@ No user named `deepsim` exists (the user is `deepsim-admin`; the git repo's owne
 | `docs/development/reports/TASK_MEE_031/TASK_HUB_DOCS_031.md` | pre-existing | Task requirements |
 | `docs/development/reports/TASK_MEE_031/TASK_MEE_031_AUDIT.md` | pre-existing | Phase 0 audit + verification evidence |
 | `docs/development/reports/TASK_MEE_031/TASK_MEE_031_COMPLETED.md` | **added** | This consolidated report |
+| *(VPS, not in repo)* `/opt/hub-portal/index.html` | modified (line 721) | Footer copyright → full legal name |
+| *(VPS, not in repo)* `/opt/hub-portal/Deepsim/.../docs/mee/index.html` | modified | Added persistent docs copyright footer + CSS |
 
 ---
 
-## 7. Approval-gate lesson (carried forward)
+## 7. Copyright / footer normalization (2026-10-29)
+
+Per user request, the copyright line was standardized to the **full legal name**, matching the name already used in `LICENSE.txt`:
+
+> **© 2026 Deepsim Intelligence Technology Inc. All rights reserved.**
+
+| Surface | Location | Change |
+|---------|----------|--------|
+| Hub footer | `/opt/hub-portal/index.html` (line 721) | Updated from `© 2026 Deepsim` → full legal name |
+| Hub footer backup | `/opt/hub-portal/backups/pre-docs-content-fix-20261028/index.html` (line 721) | Updated to match (kept consistent) |
+| Docs footer | `/opt/hub-portal/Deepsim/multimodal-emotion-engine/docs/mee/index.html` | **Added** a persistent `.docs-copyright` footer (was absent) + CSS rule |
+
+**Notes:**
+- The docs footer is a **persistent** element placed inside `docs-content` (after the doc body), so it appears on every doc page, not just one. It is styled subtly (small, muted, top border) to fit the docs aesthetic.
+- Verified live after `nginx -s reload`: Hub root and docs index both 200, both footers render the full name, and the `&copy;` entity decodes to `©`.
+- These are VPS production files (not tracked in the MEE git repo).
+
+---
+
+## 8. Approval-gate lesson (carried forward)
 
 A production change (the docs infrastructure) was made **before** explicit approval — a gate violation, documented and remediated in `TASK_MEE_031_AUDIT.md` §1 (retroactively approved by the user, Option A). **Standing rule going forward: every production change to the Hub requires explicit user approval before deployment.**
 
 ---
 
-## 8. Open items (for future tasks)
+## 9. Open items (for future tasks)
 
 | Item | Severity | Notes |
 |------|----------|-------|
@@ -161,7 +182,7 @@ A production change (the docs infrastructure) was made **before** explicit appro
 
 ---
 
-## 9. Verification snapshot (2026-10-28)
+## 10. Verification snapshot (2026-10-28 / 2026-10-29)
 
 | Check | Result |
 |-------|--------|
@@ -175,3 +196,5 @@ A production change (the docs infrastructure) was made **before** explicit appro
 | `pip install` from the org | ✅ Installed 0.4.5 |
 | `tools/publish_to_hub.sh` dry-run + syntax | ✅ OK |
 | CI `REPO=` owner | ✅ `Deepsim/multimodal-emotion-engine` |
+| Hub footer copyright (full name) | ✅ Live, `© 2026 Deepsim Intelligence Technology Inc.` |
+| Docs footer copyright (full name) | ✅ Live, added + rendering |
